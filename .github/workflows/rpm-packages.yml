@@ -23,7 +23,9 @@ jobs:
       - name: Build RPM in Fedora container
         run: |
           docker run --rm --platform linux/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }} -v "$PWD:/src" -w /src fedora:42 bash -lc '
-            dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo rpm-build
+            dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel curl rpm-build
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+            source /root/.cargo/env
             cargo build --release -p linuxfo
             mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
             cat > /root/rpmbuild/SPECS/linuxfo.spec <<EOF
