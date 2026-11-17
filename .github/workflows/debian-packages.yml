@@ -3,6 +3,7 @@ name: LinuxFo Debian packages
 on:
   workflow_dispatch:
   push:
+    branches: [gpt]
     tags: ['v*']
 
 permissions:
