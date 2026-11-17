@@ -442,7 +442,7 @@ fn main() {
 
         shell.append(&sidebar);
         shell.append(&main_area);
-        window.set_content(Some(&shell));
+        window.set_child(Some(&shell));
         window.present();
 
         let snapshot_ref = snapshot.clone();
