@@ -1,7 +1,7 @@
-use adw::prelude::*
-use gtk::{glib, Align, Orientation}
-use linuxfo_core::{collect, format_bytes, Snapshot}
-use std::{cell::RefCell, rc::Rc, time::Duration}
+use adw::prelude::*;
+use gtk::{glib, Align, Orientation};
+use linuxfo_core::{collect, format_bytes, Snapshot};
+use std::{cell::RefCell, rc::Rc, time::Duration};
 
 const CSS: &str =r#"
 window { background: #0b1020; color: #e8edf8; }
@@ -75,5 +75,5 @@ fn main(){
   let scroller=gtk::ScrolledWindow::new();scroller.set_vexpand(true);scroller.set_hexpand(true);scroller.set_child(Some(&stack));main.append(&scroller);
   shell.append(&sidebar);shell.append(&main);window.set_content(Some(&shell));window.present();
   let snap=snapshot.clone();let st=stack.clone();glib::timeout_add_local(Duration::from_secs(3),move||{*snap.borrow_mut()=collect();let name=st.visible_child_name().map(|n|n.to_string()).unwrap_or_else(||"Overview".into());st.set_visible_child(Some(&content_page(&snap.borrow(),&name)));glib::ControlFlow::Continue});
- });app.run()
+ });app.run();
 }

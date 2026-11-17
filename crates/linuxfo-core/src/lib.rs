@@ -1,9 +1,9 @@
 //! LinuxFo's portable, non-privileged Linux hardware discovery core.
 //! Each subsystem is best-effort: missing kernel interfaces never abort a scan.
 
-use serde::Serialize
-use std::{fs, path::{Path, PathBuf}}
-use sysinfo::{Disks, Networks, System}
+use serde::Serialize;
+use std::{fs, path::{Path, PathBuf}};
+use sysinfo::{Disks, Networks, System};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct HostInfo {
