@@ -1,0 +1,56 @@
+name: LinuxFo Debian packages
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  deb:
+    name: Debian package (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libadwaita-1-dev cargo rustc
+      - name: Build binary
+        run: cargo build --release -p linuxfo
+      - name: Assemble deb
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then VERSION="0.1.0"; fi
+          PKG="linuxfo_${VERSION}_${{ matrix.arch }}"
+          mkdir -p "pkg/$PKG/DEBIAN" "pkg/$PKG/usr/bin" "pkg/$PKG/usr/share/applications" "pkg/$PKG/usr/share/doc/linuxfo"
+          install -m 0755 target/release/linuxfo "pkg/$PKG/usr/bin/linuxfo"
+          install -m 0644 packaging/linuxfo.desktop "pkg/$PKG/usr/share/applications/linuxfo.desktop"
+          install -m 0644 README.md LICENSE "pkg/$PKG/usr/share/doc/linuxfo/"
+          cat > "pkg/$PKG/DEBIAN/control" <<EOF
+          Package: linuxfo
+          Version: $VERSION
+          Section: utils
+          Priority: optional
+          Architecture: ${{ matrix.arch }}
+          Depends: libgtk-4-1, libadwaita-1-0
+          Maintainer: Muhammad Hamza Mushtaq
+          Description: Linux system information and hardware monitor
+          EOF
+          dpkg-deb --build "pkg/$PKG"
+          mv "pkg/$PKG.deb" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb-${{ matrix.arch }}
+          path: linuxfo_*.deb
