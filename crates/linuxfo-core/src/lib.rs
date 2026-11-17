@@ -104,8 +104,6 @@ pub fn collect() -> Snapshot {
     system.refresh_cpu_usage(); system.refresh_memory();
     let cpus=system.cpus();
     let cpu_usage=if cpus.is_empty(){0.0}else{cpus.iter().map(|c|c.cpu_usage()).sum::<f32>()/cpus.len() as f32};
-    let mut disks=Disks::new_with וח? ();
-    let _=&mut disks;
     Snapshot {
         host:HostInfo{hostname:System::host_name().unwrap_or_else(||"Unknown host".into()),os:os_pretty_name(),kernel:System::kernel_version().unwrap_or_else(||"Unknown".into()),architecture:System::cpu_arch(),desktop:if env("XDG_CURRENT_DESKTOP").is_empty(){env("DESKTOP_SESSION")}else{env("XDG_CURRENT_DESKTOP")},uptime:uptime_string()},
         cpu:CpuInfo{model:cpu_model(),logical_cores:cpus.len(),usage_percent:cpu_usage,frequency_mhz:cpus.first().map(|c|c.frequency()).unwrap_or(0)},
