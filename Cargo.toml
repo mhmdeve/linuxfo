@@ -8,6 +8,7 @@ edition = "2021"
 license = "MIT"
 authors = ["Muhammad Hamza Mushtaq <mhmdeveloperofficial@gmail.com>"]
 repository = "https://github.com/mhmdeve/linuxfo"
+description = "Cross-distribution Linux system information and hardware monitor"
 
 [workspace.dependencies]
 anyhow = "1.0"
