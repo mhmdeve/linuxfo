@@ -26,7 +26,7 @@ jobs:
       - name: Install native build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libadwaita-1-dev dpkg-dev
+          sudo apt-get install -y build-essential pkg-config libgtk-4-dev libadwaita-1-dev dpkg-dev librsvg2-bin
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
@@ -41,6 +41,10 @@ jobs:
           PKG="linuxfo_${VERSION}_${{ matrix.arch }}"
           ROOT="pkg/$PKG"
           mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/share/doc/linuxfo" "$ROOT/usr/share/icons/hicolor/scalable/apps"
+          for size in 48 64 128 256 512; do
+            mkdir -p "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps"
+            rsvg-convert -w "$size" -h "$size" packaging/io.linuxfo.SystemInfo.svg > "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps/io.linuxfo.SystemInfo.png"
+          done
           install -m 0755 target/release/linuxfo "$ROOT/usr/bin/linuxfo"
           install -m 0644 packaging/io.linuxfo.SystemInfo.desktop "$ROOT/usr/share/applications/io.linuxfo.SystemInfo.desktop"
           install -m 0644 packaging/io.linuxfo.SystemInfo.svg "$ROOT/usr/share/icons/hicolor/scalable/apps/io.linuxfo.SystemInfo.svg"
