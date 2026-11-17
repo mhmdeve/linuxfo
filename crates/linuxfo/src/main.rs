@@ -338,12 +338,17 @@ fn main() {
             );
         }
 
-        let window = adw::ApplicationWindow::builder()
+        let window = gtk::ApplicationWindow::builder()
             .application(app)
             .title("LinuxFo")
             .default_width(1380)
             .default_height(900)
             .build();
+
+        let header = gtk::HeaderBar::new();
+        header.set_show_title_buttons(true);
+        header.set_title_widget(Some(&gtk::Label::new(Some("LinuxFo"))));
+        window.set_titlebar(Some(&header));
 
         let shell = gtk::Box::new(Orientation::Horizontal, 0);
         let sidebar = gtk::Box::new(Orientation::Vertical, 14);
@@ -364,6 +369,11 @@ fn main() {
         stack.set_hexpand(true);
         stack.set_vexpand(true);
         stack.set_transition_type(gtk::StackTransitionType::Crossfade);
+
+        let scroller = gtk::ScrolledWindow::new();
+        scroller.set_vexpand(true);
+        scroller.set_hexpand(true);
+        scroller.set_child(Some(&stack));
 
         let pages = [
             "Overview", "CPU", "Memory", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes",
@@ -394,19 +404,23 @@ fn main() {
             button.add_css_class("nav-button");
 
             let stack_ref = stack.clone();
+            let scroller_ref = scroller.clone();
             let page_name = *page;
             button.connect_toggled(move |button| {
                 if button.is_active() {
                     stack_ref.set_visible_child_name(page_name);
+                    scroller_ref.vadjustment().set_value(0.0);
                 }
             });
             buttons.append(&button);
         }
 
         let stack_ref = stack.clone();
+        let scroller_ref = scroller.clone();
         first.connect_toggled(move |button| {
             if button.is_active() {
                 stack_ref.set_visible_child_name("Overview");
+                scroller_ref.vadjustment().set_value(0.0);
             }
         });
 
@@ -424,10 +438,6 @@ fn main() {
             stack.add_named(&widget, Some(page));
         }
 
-        let scroller = gtk::ScrolledWindow::new();
-        scroller.set_vexpand(true);
-        scroller.set_hexpand(true);
-        scroller.set_child(Some(&stack));
         main_area.append(&scroller);
 
         shell.append(&sidebar);
