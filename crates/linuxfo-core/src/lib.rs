@@ -57,6 +57,8 @@ pub struct DiskHealthInfo {
     pub temperature_c: Option<f64>,
     pub power_on_hours: Option<u64>,
     pub percentage_used: Option<u64>,
+    pub health_percent: Option<f64>,
+    pub performance_percent: Option<f64>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -410,6 +412,7 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
         let mut temperature_c = None;
         let mut power_on_hours = None;
         let mut percentage_used = None;
+        let mut health_percent = None;
 
         if let Ok(output) = output {
             if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
@@ -417,9 +420,11 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
                 let nvme = &json["nvme_smart_health_information_log"];
                 let ata = &json["ata_smart_data"];
                 if smart.as_bool() == Some(true) {
+                    health_percent = Some(100.0);
                     status = "Healthy".into();
                     detail = "SMART overall-health self-assessment passed.".into();
                 } else if smart.as_bool() == Some(false) {
+                    health_percent = Some(0.0);
                     status = "Warning".into();
                     detail = "SMART reports a failing health assessment. Back up this drive immediately.".into();
                 } else if !nvme.is_null() {
@@ -444,6 +449,7 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
                     }
                 }
                 if let Some(percent) = percentage_used {
+                    health_percent = Some(100.0_f64 - percent as f64);
                     if percent >= 100 {
                         status = "Endurance limit reached".into();
                         detail = format!("NVMe percentage_used is {percent}%; the rated endurance has been consumed.");
@@ -484,7 +490,7 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
             detail = "smartmontools (smartctl) is not installed.".into();
         }
 
-        result.push(DiskHealthInfo { device, model, kind, status, detail, temperature_c, power_on_hours, percentage_used });
+        result.push(DiskHealthInfo { device, model, kind, status, detail, temperature_c, power_on_hours, percentage_used, health_percent, performance_percent: None });
     }
     result.sort_by(|a,b| a.device.cmp(&b.device));
     result
@@ -504,6 +510,35 @@ fn collect_disk_health() -> Vec<DiskHealthInfo> {
         guard.0 = Some(Instant::now());
     }
     guard.1.clone()
+}
+
+/// Estimate current block-device busy time from /proc/diskstats (not a speed benchmark).
+fn collect_disk_activity() -> HashMap<String, f64> {
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Instant;
+    static PREVIOUS: OnceLock<Mutex<(Option<Instant>, HashMap<String, u64>)>> = OnceLock::new();
+    let state = PREVIOUS.get_or_init(|| Mutex::new((None, HashMap::new())));
+    let mut current = HashMap::new();
+    for line in read("/proc/diskstats").lines() {
+        let fields: Vec<&str> = line.split_whitespace().collect();
+        if fields.len() < 13 { continue; }
+        let name = fields[2].to_string();
+        if name.starts_with("loop") || name.starts_with("ram") || name.starts_with("zram")
+            || name.starts_with("dm-") { continue; }
+        if let Ok(ms) = fields[12].parse::<u64>() { current.insert(name, ms); }
+    }
+    let Ok(mut previous) = state.lock() else { return HashMap::new(); };
+    let now = Instant::now();
+    let result = if let Some(last) = previous.0 {
+        let elapsed = now.duration_since(last).as_millis().max(1) as f64;
+        current.iter().filter_map(|(name, value)| {
+            let old = previous.1.get(name)?;
+            Some((name.clone(), value.saturating_sub(*old) as f64 * 100.0 / elapsed).map(|v| v.min(100.0)))
+        }).collect()
+    } else { HashMap::new() };
+    previous.0 = Some(now);
+    previous.1 = current;
+    result
 }
 
 /// Collect a best-effort snapshot using unprivileged, standard Linux interfaces.
@@ -578,7 +613,7 @@ pub fn collect_with_system(system: &mut System) -> Snapshot {
         },
         memory: memory_info(),
         disks,
-        disk_health: collect_disk_health(),
+        disk_health,
         sensors: collect_sensors(),
         cameras: collect_video_devices(),
         usb_devices: collect_bus("/sys/bus/usb/devices", "USB"),
