@@ -513,10 +513,11 @@ fn collect_disk_health() -> Vec<DiskHealthInfo> {
 }
 
 /// Estimate current block-device busy time from /proc/diskstats (not a speed benchmark).
+type DiskActivityState = (Option<std::time::Instant>, HashMap<String, u64>);
+
 fn collect_disk_activity() -> HashMap<String, f64> {
     use std::sync::{Mutex, OnceLock};
-    use std::time::Instant;
-    static PREVIOUS: OnceLock<Mutex<(Option<Instant>, HashMap<String, u64>)>> = OnceLock::new();
+    static PREVIOUS: OnceLock<Mutex<DiskActivityState>> = OnceLock::new();
     let state = PREVIOUS.get_or_init(|| Mutex::new((None, HashMap::new())));
     let mut current = HashMap::new();
     for line in read("/proc/diskstats").lines() {
