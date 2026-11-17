@@ -100,8 +100,10 @@ fn collect_bus(root:&str)->Vec<DeviceInfo>{
 
 /// Collect a best-effort snapshot using unprivileged, standard Linux interfaces.
 pub fn collect() -> Snapshot {
-    let mut system=System::new_all(); system.refresh_all();
-    system.refresh_cpu_usage(); system.refresh_memory();
+    let mut system=System::new_all();
+    system.refresh_memory();
+    // CPU usage needs two refresh samples; avoid blocking the UI collector for a full sampling period.
+    system.refresh_cpu_usage();
     let cpus=system.cpus();
     let cpu_usage=if cpus.is_empty(){0.0}else{cpus.iter().map(|c|c.cpu_usage()).sum::<f32>()/cpus.len() as f32};
     Snapshot {
