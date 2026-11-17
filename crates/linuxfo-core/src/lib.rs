@@ -366,7 +366,26 @@ fn collect_bus(root: &str, bus: &str) -> Vec<DeviceInfo> {
 
 
 /// Read SMART/NVMe health using smartmontools when installed and permitted.
+fn is_effective_root() -> bool {
+    fs::read_to_string("/proc/self/status").ok()
+        .and_then(|status| status.lines().find(|line| line.starts_with("Uid:")).map(str::to_string))
+        .and_then(|line| line.split_whitespace().nth(2).and_then(|uid| uid.parse::<u32>().ok())) == Some(0)
+}
+
+pub fn collect_disk_health_helper_json() -> String {
+    serde_json::to_string(&collect_disk_health_uncached()).unwrap_or_else(|_| "[]".to_string())
+}
+
 fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
+    if !is_effective_root() {
+        if let Ok(executable) = std::env::current_exe() {
+            if let Ok(output) = std::process::Command::new("pkexec").arg(executable).arg("--smart-scan").output() {
+                if output.status.success() {
+                    if let Ok(disks) = serde_json::from_slice::<Vec<DiskHealthInfo>>(&output.stdout) { return disks; }
+                }
+            }
+        }
+    }
     let mut result = Vec::new();
     let Ok(entries) = fs::read_dir("/sys/block") else { return result; };
     for entry in entries.flatten() {
@@ -383,40 +402,8 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
             else if name.starts_with("vd") || name.starts_with("xvd") { "Virtual disk" }
             else { "Block device" }.to_string();
 
-        // Try without elevation first. If the device rejects access, ask the
-        // desktop's Polkit authentication agent via pkexec (never collect a password).
-        let output = std::process::Command::new("smartctl")
-            .args(["-a", "-j", &device]).output();
-
-        let output = match output {
-            Ok(first) => {
-                let diagnostics = format!(
-                    "{} {}",
-                    String::from_utf8_lossy(&first.stdout),
-                    String::from_utf8_lossy(&first.stderr)
-                ).to_lowercase();
-                let denied = diagnostics.contains("permission denied")
-                    || diagnostics.contains("operation not permitted")
-                    || diagnostics.contains("unable to open device")
-                    || diagnostics.contains("requires root")
-                    || diagnostics.contains("must be root");
-                if denied {
-                    match std::process::Command::new("pkexec")
-                        .args(["/usr/sbin/smartctl", "-a", "-j", &device])
-                        .output()
-                    {
-                        Ok(elevated) => Ok(elevated),
-                        Err(error) => {
-                            eprintln!("LinuxFo: unable to start pkexec for {device}: {error}");
-                            Ok(first)
-                        }
-                    }
-                } else {
-                    Ok(first)
-                }
-            }
-            Err(error) => Err(error),
-        };
+        // This scan runs as the normal user or inside the single pkexec helper.
+        let output = std::process::Command::new("smartctl").args(["-a", "-j", &device]).output();
 
         let mut status = "SMART unavailable".to_string();
         let mut detail = "Install smartmontools and grant device read access to inspect drive health.".to_string();
