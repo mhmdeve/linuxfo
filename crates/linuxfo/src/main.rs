@@ -8,7 +8,7 @@ const CSS: &str = r#"
 * { font-family: "Inter", "Noto Sans", "Cantarell", sans-serif; }
 window { background: #e9ebe8; color: #252a26; }
 headerbar { background: #e5e8e3; color: #252a26; border-bottom: 1px solid alpha(currentColor, 0.10); min-height: 54px; }
-.sidebar { background: #e5e8e3; border-right: 1px solid alpha(currentColor, 0.10); }
+.sidebar { background: #f1f3ef; color: #252a26; border: 1px solid #d8ded7; border-radius: 22px; padding: 14px; box-shadow: 0 5px 18px alpha(#1c281e, 0.08); overflow: hidden; }
 .brand { font-size: 23px; font-weight: 800; letter-spacing: -0.9px; color: #202621; }
 .brand-mark { background: #343d36; color: #f4f5f1; border-radius: 11px; padding: 8px 9px; font-size: 13px; font-weight: 800; }
 .nav-button { background: transparent; color: #69736b; border: 1px solid transparent; border-radius: 12px; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; text-align: left; box-shadow: none; }
@@ -38,8 +38,9 @@ progressbar progress { background: #438354; border-radius: 8px; min-height: 8px;
 separator { background: #d8ded7; }
 scrolledwindow { background: transparent; }
 window.dark { background: #202420; color: #e5e9e4; }
-window.dark headerbar, window.dark .sidebar { background: #252b26; color: #e5e9e4; }
-window.dark .sidebar { border-right-color: #39413a; }
+window.dark headerbar { background: #252b26; color: #e5e9e4; }
+window.dark .sidebar { background: #252b26; color: #e5e9e4; border: 1px solid #3b463d; box-shadow: 0 5px 20px alpha(#000000, 0.18); }
+
 window.dark .brand, window.dark .page-title, window.dark .metric { color: #edf1eb; }
 window.dark .brand-mark { background: #dce8dc; color: #263229; }
 window.dark .nav-button { color: #b7c0b8; }
@@ -480,8 +481,19 @@ fn main() {
         brand_panel.add_css_class("brand-panel");
         let brand = gtk::Box::new(Orientation::Horizontal, 10);
         brand.set_valign(Align::Center);
-        let logo = gtk::Image::from_icon_name("io.linuxfo.SystemInfo");
-        logo.set_pixel_size(40);
+        // Load the actual SVG file directly: icon-theme lookup is not reliable
+        // on desktops whose icon cache has not been refreshed yet.
+        let source_logo = concat!(env!("CARGO_MANIFEST_DIR"), "/../../packaging/io.linuxfo.SystemInfo.svg");
+        let installed_logo = "/usr/share/icons/hicolor/scalable/apps/io.linuxfo.SystemInfo.svg";
+        let logo_path = if std::path::Path::new(source_logo).is_file() {
+            source_logo
+        } else {
+            installed_logo
+        };
+        let logo = gtk::Image::from_file(logo_path);
+        logo.set_pixel_size(42);
+        logo.set_size_request(42, 42);
+        logo.set_valign(Align::Center);
         logo.add_css_class("brand-logo");
         brand.append(&logo);
         brand.append(&label("LinuxFo", "brand"));
