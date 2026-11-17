@@ -14,6 +14,10 @@ LinuxFo is a cross-distribution Linux system information centre. It brings hardw
 
 LinuxFo is written in Rust with GTK4/libadwaita. Linux hardware data is collected through standard kernel interfaces (/proc, /sys, udev where available) and optional utilities. The UI and collectors are separated so missing utilities or inaccessible devices cannot crash the application.
 
+## Build targets and packaging
+
+GitHub Actions validates native GTK builds on x86_64 and AArch64. Version tags publish compressed binaries and SHA-256 checksums. Debian package builds target amd64/arm64; Fedora RPM and Arch PKGBUILD packaging have dedicated workflows. All native desktop packages require compatible GTK4/libadwaita runtime libraries. See [packaging/README.md](packaging/README.md) for the packaging matrix and limitations.
+
 ## Development
 
 See CONTRIBUTING.md and docs/architecture.md.
