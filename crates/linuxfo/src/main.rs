@@ -330,17 +330,6 @@ fn main() {
             .default_height(900)
             .build();
 
-        // Keep native desktop window controls visible on KDE, GNOME and other GTK desktops.
-        let header = gtk::HeaderBar::new();
-        header.set_show_title_buttons(true);
-        let title_widget = gtk::Box::new(Orientation::Horizontal, 8);
-        let app_icon = gtk::Image::from_icon_name("io.linuxfo.SystemInfo");
-        app_icon.set_pixel_size(28);
-        title_widget.append(&app_icon);
-        title_widget.append(&label("LinuxFo", "brand"));
-        header.set_title_widget(Some(&title_widget));
-        window.set_titlebar(Some(&header));
-
         let shell = gtk::Box::new(Orientation::Horizontal, 0);
         let sidebar = gtk::Box::new(Orientation::Vertical, 14);
         sidebar.set_width_request(224);
