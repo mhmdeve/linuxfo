@@ -5,21 +5,25 @@ use sysinfo::System;
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 const CSS: &str = r#"
-window { background: #0b1020; color: #e8edf8; }
-.sidebar { background: #10182b; border-right: 1px solid #24304a; }
-.brand { font-size: 23px; font-weight: 800; letter-spacing: -0.8px; color: #f4f7ff; }
-.brand-mark { background: linear-gradient(135deg,#6d7cff,#43d6c5); color: #08101e; border-radius: 12px; padding: 8px; font-weight: 900; }
-.nav-button { background: transparent; color: #a9b5cc; border-radius: 10px; padding: 10px 12px; text-align: left; }
-.nav-button:hover,.nav-button:checked { background: #202d48; color: #fff; }
+window { background: #11151d; color: #edf2f7; }
+headerbar { background: #171d27; border-bottom: 1px solid #293342; min-height: 48px; }
+.sidebar { background: #171d27; border-right: 1px solid #293342; }
+.brand { font-size: 22px; font-weight: 800; letter-spacing: -0.8px; color: #f4f7fb; }
+.brand-mark { background: linear-gradient(135deg,#28d7c1,#6d5dfc); color: #07131b; border-radius: 12px; padding: 8px; font-weight: 900; }
+.nav-button { background: transparent; color: #aab6c6; border-radius: 10px; padding: 10px 12px; text-align: left; }
+.nav-button:hover,.nav-button:checked { background: #26313e; color: #fff; }
 .page-title { font-size: 29px; font-weight: 750; letter-spacing: -0.7px; }
-.muted { color: #8d9bb6; }
-.card { background: #141f34; border: 1px solid #263650; border-radius: 16px; padding: 18px; }
-.card-title { color: #a9b8d1; font-size: 12px; font-weight: 700; letter-spacing: 0.7px; }
-.metric { font-size: 28px; font-weight: 750; color: #f5f7ff; }
-.metric-small { font-size: 17px; font-weight: 650; color: #f5f7ff; }
-.accent { color: #69d8c9; }
-.pill { background: #1d3b43; color: #7de5d4; border-radius: 20px; padding: 5px 9px; font-size: 11px; }
-separator { background: #263650; }
+.muted { color: #91a0b2; }
+.card { background: #1b2430; border: 1px solid #303d4d; border-radius: 16px; padding: 18px; }
+.card-title { color: #9eafc1; font-size: 12px; font-weight: 700; letter-spacing: 0.7px; }
+.metric { font-size: 28px; font-weight: 750; color: #f5f7fb; }
+.metric-small { font-size: 15px; font-weight: 650; color: #f5f7fb; }
+.accent { color: #40ddc4; font-weight: 700; }
+.pill { background: #183c39; color: #70ead8; border-radius: 20px; padding: 5px 9px; font-size: 11px; }
+boxedlist, list { background: #1b2430; border: 1px solid #303d4d; border-radius: 12px; }
+list row { border-bottom: 1px solid #303d4d; }
+separator { background: #303d4d; }
+scrolledwindow { background: transparent; }
 "#;
 
 fn label(text: &str, class: &str) -> gtk::Label {
