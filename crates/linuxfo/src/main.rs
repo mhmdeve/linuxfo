@@ -371,6 +371,12 @@ fn main() {
         header.set_title_widget(Some(&gtk::Label::new(Some("LinuxFo"))));
 
         let style_manager = adw::StyleManager::default();
+        if style_manager.is_dark() { window.add_css_class("dark"); }
+        let window_for_theme = window.clone();
+        style_manager.connect_notify_local(Some("dark"), move |manager, _| {
+            if manager.is_dark() { window_for_theme.add_css_class("dark"); }
+            else { window_for_theme.remove_css_class("dark"); }
+        });
         let theme_button = gtk::MenuButton::new();
         theme_button.set_icon_name("applications-graphics-symbolic");
         theme_button.set_tooltip_text(Some("Appearance"));
