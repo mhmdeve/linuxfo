@@ -7,6 +7,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use sysinfo::{Disks, Networks, System};
 
 #[derive(Debug, Clone, Serialize)]
@@ -248,6 +249,38 @@ fn collect_sensors() -> Vec<SensorInfo> {
     sensors
 }
 
+fn camera_permission_detail(path: &Path) -> String {
+    let Ok(metadata) = fs::metadata(path) else {
+        return "Device node exists but its permissions could not be read".into();
+    };
+    let status = read("/proc/self/status");
+    let effective_uid = status.lines().find(|line| line.starts_with("Uid:"))
+        .and_then(|line| line.split_whitespace().nth(2))
+        .and_then(|value| value.parse::<u32>().ok()).unwrap_or(u32::MAX);
+    let mut groups: Vec<u32> = status.lines()
+        .find(|line| line.starts_with("Groups:"))
+        .into_iter().flat_map(|line| line.split_whitespace().skip(1))
+        .filter_map(|value| value.parse::<u32>().ok()).collect();
+    if let Some(gid) = status.lines().find(|line| line.starts_with("Gid:"))
+        .and_then(|line| line.split_whitespace().nth(2))
+        .and_then(|value| value.parse::<u32>().ok()) {
+        groups.push(gid);
+    }
+    let mode = metadata.permissions().mode();
+    let readable = if effective_uid == metadata.uid() {
+        mode & 0o400 != 0
+    } else if groups.contains(&metadata.gid()) {
+        mode & 0o040 != 0
+    } else {
+        mode & 0o004 != 0
+    };
+    if readable {
+        format!("Read permission appears available • {}:{:o}; stream not opened", metadata.gid(), mode & 0o777)
+    } else {
+        format!("No read permission detected • {}:{:o}. Add your account to the device group (often 'video') and sign in again.", metadata.gid(), mode & 0o777)
+    }
+}
+
 fn collect_video_devices() -> Vec<DeviceInfo> {
     let mut devices = Vec::new();
     let Ok(entries) = fs::read_dir("/dev") else {
@@ -274,7 +307,7 @@ fn collect_video_devices() -> Vec<DeviceInfo> {
         devices.push(DeviceInfo {
             name,
             path: path.display().to_string(),
-            detail: "Video node discovered; streaming capability not tested".into(),
+            detail: camera_permission_detail(&path),
         });
     }
 
