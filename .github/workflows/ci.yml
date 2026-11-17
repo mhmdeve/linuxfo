@@ -35,6 +35,8 @@ jobs:
         run: cargo test -p linuxfo-core
       - name: Lint core
         run: cargo clippy -p linuxfo-core --all-targets -- -D warnings
+      - name: Build GUI application
+        run: cargo build --release -p linuxfo
       - name: Build desktop application
         run: cargo build --release -p linuxfo
       - name: Upload binary
