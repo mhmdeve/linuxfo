@@ -365,7 +365,7 @@ fn collect_bus(root: &str, bus: &str) -> Vec<DeviceInfo> {
 
 
 /// Read SMART/NVMe health using smartmontools when installed and permitted.
-fn collect_disk_health() -> Vec<DiskHealthInfo> {
+fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
     let mut result = Vec::new();
     let Ok(entries) = fs::read_dir("/sys/block") else { return result; };
     for entry in entries.flatten() {
@@ -443,6 +443,22 @@ fn collect_disk_health() -> Vec<DiskHealthInfo> {
     }
     result.sort_by(|a,b| a.device.cmp(&b.device));
     result
+}
+
+// SMART commands are comparatively slow; cache their results for one minute instead
+// of invoking smartctl on every three-second UI refresh.
+fn collect_disk_health() -> Vec<DiskHealthInfo> {
+    use std::sync::{Mutex, OnceLock};
+    use std::time::Instant;
+    static CACHE: OnceLock<Mutex<(Option<Instant>, Vec<DiskHealthInfo>)>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new((None, Vec::new())));
+    let Ok(mut guard) = cache.lock() else { return collect_disk_health_uncached(); };
+    let fresh = guard.0.map(|time| time.elapsed().as_secs() < 60).unwrap_or(false);
+    if !fresh {
+        guard.1 = collect_disk_health_uncached();
+        guard.0 = Some(Instant::now());
+    }
+    guard.1.clone()
 }
 
 /// Collect a best-effort snapshot using unprivileged, standard Linux interfaces.
