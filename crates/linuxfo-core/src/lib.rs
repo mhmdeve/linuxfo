@@ -533,7 +533,7 @@ fn collect_disk_activity() -> HashMap<String, f64> {
         let elapsed = now.duration_since(last).as_millis().max(1) as f64;
         current.iter().filter_map(|(name, value)| {
             let old = previous.1.get(name)?;
-            Some((name.clone(), value.saturating_sub(*old) as f64 * 100.0 / elapsed).map(|v| v.min(100.0)))
+            Some((name.clone(), (value.saturating_sub(*old) as f64 * 100.0 / elapsed).min(100.0)))
         }).collect()
     } else { HashMap::new() };
     previous.0 = Some(now);
