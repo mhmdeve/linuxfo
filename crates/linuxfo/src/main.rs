@@ -29,6 +29,22 @@ progressbar trough { background: #dce1da; border-radius: 8px; min-height: 8px; }
 progressbar progress { background: #438354; border-radius: 8px; min-height: 8px; }
 separator { background: #d8ded7; }
 scrolledwindow { background: transparent; }
+window.dark { background: #202420; color: #e5e9e4; }
+window.dark headerbar, window.dark .sidebar { background: #252b26; color: #e5e9e4; }
+window.dark .sidebar { border-right-color: #39413a; }
+window.dark .brand, window.dark .page-title, window.dark .metric { color: #edf1eb; }
+window.dark .brand-mark { background: #dce8dc; color: #263229; }
+window.dark .nav-button { color: #b7c0b8; }
+window.dark .nav-button:hover { background: #303a32; color: #ffffff; }
+window.dark .nav-button:checked { background: #314637; color: #bce3c3; border-color: #405947; }
+window.dark .card, window.dark boxedlist, window.dark list { background: #2b322c; color: #e5e9e4; border-color: #414a42; }
+window.dark .metric-small { color: #e0e7df; }
+window.dark .muted { color: #a0aaa1; }
+window.dark .card-title { color: #aab5ab; }
+window.dark .accent { color: #91d3a0; }
+window.dark progressbar trough { background: #465047; }
+window.dark progressbar progress { background: #75b985; }
+window.dark separator { background: #414a42; }
 "#;
 
 fn label(text: &str, class: &str) -> gtk::Label {
