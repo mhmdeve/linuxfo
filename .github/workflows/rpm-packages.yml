@@ -34,7 +34,7 @@ Version: 0.1.0
 Release: 1%{?dist}
 Summary: Linux system information and hardware monitor
 License: MIT
-Requires: gtk4, libadwaita
+Requires: gtk4, libadwaita, smartmontools
 BuildArch: %{_arch}
 %description
 LinuxFo hardware and system information desktop application.
