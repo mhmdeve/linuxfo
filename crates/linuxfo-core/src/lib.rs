@@ -529,7 +529,7 @@ fn collect_disk_activity() -> HashMap<String, f64> {
         if let Ok(ms) = fields[12].parse::<u64>() { current.insert(name, ms); }
     }
     let Ok(mut previous) = state.lock() else { return HashMap::new(); };
-    let now = Instant::now();
+    let now = std::time::Instant::now();
     let result = if let Some(last) = previous.0 {
         let elapsed = now.duration_since(last).as_millis().max(1) as f64;
         current.iter().filter_map(|(name, value)| {
