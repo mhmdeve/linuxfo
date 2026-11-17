@@ -1,0 +1,23 @@
+name: LinuxFo Arch package
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create source archive and PKGBUILD bundle
+        run: |
+          mkdir -p arch-package
+          cp packaging/arch/PKGBUILD arch-package/
+          cp README.md LICENSE arch-package/
+          tar -czf linuxfo-arch-package.tar.gz arch-package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch-pkgbuild
+          path: linuxfo-arch-package.tar.gz
