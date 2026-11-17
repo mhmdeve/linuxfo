@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.linuxfo.SystemInfo</id>
+  <name>LinuxFo</name>
+  <summary>System information and hardware monitor for Linux</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <description><p>Explore your Linux system, resources, storage, sensors, cameras, and connected hardware in one desktop app.</p></description>
+  <launchable type="desktop-id">linuxfo.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+</component>
