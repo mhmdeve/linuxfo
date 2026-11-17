@@ -48,6 +48,18 @@ pub struct DiskInfo {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct DiskHealthInfo {
+    pub device: String,
+    pub model: String,
+    pub kind: String,
+    pub status: String,
+    pub detail: String,
+    pub temperature_c: Option<f64>,
+    pub power_on_hours: Option<u64>,
+    pub percentage_used: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct SensorInfo {
     pub id: String,
     pub chip: String,
@@ -86,7 +98,7 @@ pub struct Snapshot {
     pub host: HostInfo,
     pub cpu: CpuInfo,
     pub memory: MemoryInfo,
-    pub disks: Vec<DiskInfo>,
+    pub disks: Vec<DiskInfo>,\n    pub disk_health: Vec<DiskHealthInfo>,
     pub sensors: Vec<SensorInfo>,
     pub cameras: Vec<DeviceInfo>,
     pub usb_devices: Vec<DeviceInfo>,
@@ -351,6 +363,88 @@ fn collect_bus(root: &str, bus: &str) -> Vec<DeviceInfo> {
     devices
 }
 
+
+/// Read SMART/NVMe health using smartmontools when installed and permitted.
+fn collect_disk_health() -> Vec<DiskHealthInfo> {
+    let mut result = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/block") else { return result; };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("loop") || name.starts_with("ram") || name.starts_with("zram")
+            || name.starts_with("dm-") { continue; }
+        let device = format!("/dev/{name}");
+        let base = entry.path();
+        let model = read(base.join("device/model"));
+        let model = if model.is_empty() { name.clone() } else { model };
+        let kind = if name.starts_with("nvme") { "NVMe SSD" }
+            else if name.starts_with("sd") { "SATA/SAS or USB drive" }
+            else if name.starts_with("mmc") { "eMMC / SD storage" }
+            else if name.starts_with("vd") { "Virtual disk" }
+            else if name.starts_with("xvd") { "Virtual disk" }
+            else { "Block device" }.to_string();
+
+        let output = std::process::Command::new("smartctl")
+            .args(["-a", "-j", &device]).output();
+        let mut status = "SMART unavailable".to_string();
+        let mut detail = "Install smartmontools and grant device read access to inspect drive health.".to_string();
+        let mut temperature_c = None;
+        let mut power_on_hours = None;
+        let mut percentage_used = None;
+
+        if let Ok(output) = output {
+            if let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout) {
+                let smart = &json["smart_status"]["passed"];
+                let nvme = &json["nvme_smart_health_information_log"];
+                let ata = &json["ata_smart_data"];
+                if smart.as_bool() == Some(true) {
+                    status = "Healthy".into();
+                    detail = "SMART overall-health self-assessment passed.".into();
+                } else if smart.as_bool() == Some(false) {
+                    status = "Warning".into();
+                    detail = "SMART reports a failing health assessment. Back up this drive immediately.".into();
+                } else if !nvme.is_null() {
+                    status = "Available".into();
+                    detail = "NVMe health log received; overall SMART pass flag not supplied.".into();
+                } else if !ata.is_null() {
+                    status = "Available".into();
+                    detail = "SMART data received; overall health flag not supplied.".into();
+                } else if let Some(message) = json["smartctl"]["messages"].as_array()
+                    .and_then(|a| a.first()).and_then(|v| v["string"].as_str()) {
+                    detail = message.to_string();
+                }
+                temperature_c = nvme["temperature"].as_f64()
+                    .or_else(|| json["temperature"]["current"].as_f64());
+                power_on_hours = nvme["power_on_hours"].as_u64()
+                    .or_else(|| json["power_on_time"]["hours"].as_u64());
+                percentage_used = nvme["percentage_used"].as_u64();
+                if let Some(warning) = nvme["critical_warning"].as_u64() {
+                    if warning > 0 {
+                        status = "Critical".into();
+                        detail = format!("NVMe critical warning bitmask: {warning:#04x}. Back up data and investigate.");
+                    }
+                }
+                if let Some(percent) = percentage_used {
+                    if percent >= 100 {
+                        status = "Endurance limit reached".into();
+                        detail = format!("NVMe percentage_used is {percent}%; the rated endurance has been consumed.");
+                    }
+                }
+                if !output.status.success() && status == "SMART unavailable" {
+                    detail = "smartctl could not read this device. Check permissions, controller support, or run with elevated privileges.".into();
+                }
+            } else {
+                detail = "smartctl returned data that could not be parsed.".into();
+            }
+        } else {
+            detail = "smartmontools (smartctl) is not installed.".into();
+        }
+
+        result.push(DiskHealthInfo { device, model, kind, status, detail, temperature_c, power_on_hours, percentage_used });
+    }
+    result.sort_by(|a,b| a.device.cmp(&b.device));
+    result
+}
+
 /// Collect a best-effort snapshot using unprivileged, standard Linux interfaces.
 pub fn collect() -> Snapshot {
     let mut system = System::new_all();
@@ -432,7 +526,7 @@ pub fn collect_with_system(system: &mut System) -> Snapshot {
         diagnostics: vec![
             "Sensor coverage depends on kernel drivers and exported hwmon channels.".into(),
             "Camera inventory does not open devices or test video streaming.".into(),
-            "SMART, detailed GPU telemetry and firmware DIMM data are planned optional integrations.".into(),
+            "Disk SMART/NVMe health requires smartmontools and suitable device permissions.".into(),
         ],
     }
 }
