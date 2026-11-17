@@ -383,8 +383,41 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
             else if name.starts_with("vd") || name.starts_with("xvd") { "Virtual disk" }
             else { "Block device" }.to_string();
 
+        // Try without elevation first. If the device rejects access, ask the
+        // desktop's Polkit authentication agent via pkexec (never collect a password).
         let output = std::process::Command::new("smartctl")
             .args(["-a", "-j", &device]).output();
+
+        let output = match output {
+            Ok(first) => {
+                let diagnostics = format!(
+                    "{} {}",
+                    String::from_utf8_lossy(&first.stdout),
+                    String::from_utf8_lossy(&first.stderr)
+                ).to_lowercase();
+                let denied = diagnostics.contains("permission denied")
+                    || diagnostics.contains("operation not permitted")
+                    || diagnostics.contains("unable to open device")
+                    || diagnostics.contains("requires root")
+                    || diagnostics.contains("must be root");
+                if denied {
+                    match std::process::Command::new("pkexec")
+                        .args(["/usr/sbin/smartctl", "-a", "-j", &device])
+                        .output()
+                    {
+                        Ok(elevated) => Ok(elevated),
+                        Err(error) => {
+                            eprintln!("LinuxFo: unable to start pkexec for {device}: {error}");
+                            Ok(first)
+                        }
+                    }
+                } else {
+                    Ok(first)
+                }
+            }
+            Err(error) => Err(error),
+        };
+
         let mut status = "SMART unavailable".to_string();
         let mut detail = "Install smartmontools and grant device read access to inspect drive health.".to_string();
         let mut temperature_c = None;
@@ -430,7 +463,19 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
                     }
                 }
                 if !output.status.success() && status == "SMART unavailable" {
-                    detail = "smartctl could not read this device. Check permissions, controller support, or run with elevated privileges.".into();
+                    let diagnostics = format!(
+                        "{} {}",
+                        String::from_utf8_lossy(&output.stdout),
+                        String::from_utf8_lossy(&output.stderr)
+                    ).to_lowercase();
+                    detail = if diagnostics.contains("not authorized")
+                        || diagnostics.contains("authentication")
+                        || diagnostics.contains("cancelled")
+                    {
+                        "Administrator authorization was cancelled or denied. Select Refresh and approve the system authentication prompt to read SMART data.".into()
+                    } else {
+                        "smartctl could not read this device. Check controller support and device permissions.".into()
+                    };
                 }
             } else {
                 detail = "smartctl returned data that could not be parsed.".into();
