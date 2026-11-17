@@ -1,0 +1,23 @@
+pkgname=linuxfo
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Linux system information and hardware monitor'
+arch=('x86_64' 'aarch64')
+url='https://github.com/mhmdeve/linuxfo'
+license=('MIT')
+depends=('gtk4' 'libadwaita')
+makedepends=('rust' 'cargo' 'pkgconf')
+source=("linuxfo-$pkgver.tar.gz::https://github.com/mhmdeve/linuxfo/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$srcdir/linuxfo-$pkgver"
+  cargo build --release -p linuxfo
+}
+
+package() {
+  cd "$srcdir/linuxfo-$pkgver"
+  install -Dm755 target/release/linuxfo "$pkgdir/usr/bin/linuxfo"
+  install -Dm644 packaging/linuxfo.desktop "$pkgdir/usr/share/applications/linuxfo.desktop"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/linuxfo/LICENSE"
+}
