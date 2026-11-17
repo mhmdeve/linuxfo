@@ -380,8 +380,7 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
         let kind = if name.starts_with("nvme") { "NVMe SSD" }
             else if name.starts_with("sd") { "SATA/SAS or USB drive" }
             else if name.starts_with("mmc") { "eMMC / SD storage" }
-            else if name.starts_with("vd") { "Virtual disk" }
-            else if name.starts_with("xvd") { "Virtual disk" }
+            else if name.starts_with("vd") || name.starts_with("xvd") { "Virtual disk" }
             else { "Block device" }.to_string();
 
         let output = std::process::Command::new("smartctl")
