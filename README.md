@@ -50,3 +50,16 @@ Run locally with `cargo run -p linuxfo` after installing Rust and GTK4/libadwait
 ## Hardware visibility
 
 Linux exposes hardware information through kernel interfaces, firmware tables, drivers, and optional userspace tools. No application can promise every sensor or camera on every machine: some devices require vendor drivers, firmware support, elevated permissions, or APIs unavailable in a particular environment. LinuxFo surfaces source and availability for each reading.
+
+
+## Live monitoring and camera permissions
+
+LinuxFo keeps a single system monitor alive while the window is open. CPU percentages and per-process CPU/RAM values are calculated from successive kernel samples and refresh every three seconds. The Processes page shows the busiest processes first.
+
+Camera discovery is intentionally passive: LinuxFo lists `/dev/video*` nodes and checks the current user's read permission without opening the camera or starting a stream. On many distributions, camera nodes are assigned to the `video` group. If the Cameras page reports missing permission, an administrator can add the current account to that group:
+
+```bash
+sudo usermod -aG video "$USER"
+```
+
+Sign out and sign back in for the group change to take effect. Some distributions use a different device group or access policy; follow the permissions shown for the actual device. Native Debian packages do not use Flatpak's camera permission portal.
