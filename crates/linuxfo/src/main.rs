@@ -3,7 +3,7 @@ use gtk::{glib, Align, Orientation};
 use linuxfo_core::{collect, format_bytes, Snapshot};
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
-const CSS:&str=r#"
+const CSS: &str =r#"
 window { background: #0b1020; color: #e8edf8; }
 .sidebar { background: #10182b; border-right: 1px solid #24304a; }
 .brand { font-size: 23px; font-weight: 800; letter-spacing: -0.8px; color: #f4f7ff; }
