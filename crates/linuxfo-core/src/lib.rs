@@ -589,6 +589,13 @@ pub fn collect_with_system(system: &mut System) -> Snapshot {
     processes.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
     processes.truncate(150);
 
+    let activity = collect_disk_activity();
+    let mut disk_health = collect_disk_health();
+    for disk in &mut disk_health {
+        let name = disk.device.trim_start_matches("/dev/");
+        disk.performance_percent = activity.get(name).copied();
+    }
+
     Snapshot {
         host: HostInfo {
             hostname: System::host_name().unwrap_or_else(|| "Unknown host".into()),
