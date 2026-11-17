@@ -72,6 +72,15 @@ pub struct NetworkInfo {
 }
 
 #[derive(Debug, Clone, Serialize)]
+pub struct ProcessInfo {
+    pub pid: u32,
+    pub name: String,
+    pub cpu_percent: f32,
+    pub memory_bytes: u64,
+    pub status: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub struct Snapshot {
     pub host: HostInfo,
     pub cpu: CpuInfo,
@@ -82,6 +91,7 @@ pub struct Snapshot {
     pub usb_devices: Vec<DeviceInfo>,
     pub pci_devices: Vec<DeviceInfo>,
     pub networks: Vec<NetworkInfo>,
+    pub processes: Vec<ProcessInfo>,
     pub diagnostics: Vec<String>,
 }
 
@@ -311,6 +321,11 @@ fn collect_bus(root: &str, bus: &str) -> Vec<DeviceInfo> {
 /// Collect a best-effort snapshot using unprivileged, standard Linux interfaces.
 pub fn collect() -> Snapshot {
     let mut system = System::new_all();
+    collect_with_system(&mut system)
+}
+
+/// Refresh an existing sysinfo instance so CPU deltas and process counters are meaningful.
+pub fn collect_with_system(system: &mut System) -> Snapshot {
     system.refresh_all();
 
     let cpus = system.cpus();
@@ -341,6 +356,16 @@ pub fn collect() -> Snapshot {
         })
         .collect();
 
+    let mut processes: Vec<ProcessInfo> = system.processes().iter().map(|(pid, process)| ProcessInfo {
+        pid: pid.as_u32(),
+        name: process.name().to_string_lossy().into_owned(),
+        cpu_percent: process.cpu_usage(),
+        memory_bytes: process.memory(),
+        status: format!("{:?}", process.status()),
+    }).collect();
+    processes.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
+    processes.truncate(150);
+
     Snapshot {
         host: HostInfo {
             hostname: System::host_name().unwrap_or_else(|| "Unknown host".into()),
@@ -370,6 +395,7 @@ pub fn collect() -> Snapshot {
         usb_devices: collect_bus("/sys/bus/usb/devices", "USB"),
         pci_devices: collect_bus("/sys/bus/pci/devices", "PCI"),
         networks,
+        processes,
         diagnostics: vec![
             "Sensor coverage depends on kernel drivers and exported hwmon channels.".into(),
             "Camera inventory does not open devices or test video streaming.".into(),
