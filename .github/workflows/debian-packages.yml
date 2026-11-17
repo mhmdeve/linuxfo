@@ -55,7 +55,7 @@ jobs:
           Section: utils
           Priority: optional
           Architecture: ${{ matrix.arch }}
-          Depends: libgtk-4-1, libadwaita-1-0
+          Depends: libgtk-4-1, libadwaita-1-0, smartmontools
           Maintainer: Muhammad Hamza Mushtaq <mhmdeveloperofficial@gmail.com>
           Homepage: https://github.com/mhmdeve/linuxfo
           Description: Linux system information and hardware monitor
