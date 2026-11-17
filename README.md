@@ -2,6 +2,20 @@
 
 LinuxFo is a cross-distribution Linux system information centre. It brings hardware, operating-system, resource, storage, sensor, camera, network, and device diagnostics into one desktop application.
 
+## Screenshots
+
+### System Overview
+
+![LinuxFo System Overview](preview/PREVIEW-1.png)
+
+### Disk Health
+
+![LinuxFo Disk Health](preview/PREVIEW-2.png)
+
+### Storage
+
+![LinuxFo Storage](preview/PREVIEW-3.png)
+
 ## Goals
 
 - One coherent GTK desktop experience across Debian/Ubuntu, Fedora, Arch, openSUSE, Alpine, and other Linux distributions.
