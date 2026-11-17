@@ -2,7 +2,7 @@
 //! Each subsystem is best-effort: missing kernel interfaces never abort a scan.
 
 use serde::Serialize;
-use std::{fs, path::{Path, PathBuf}, time::Duration};
+use std::{fs, path::{Path, PathBuf}};
 use sysinfo::{Disks, Networks, System};
 
 #[derive(Debug, Clone, Serialize)]
@@ -100,7 +100,7 @@ fn collect_bus(root:&str)->Vec<DeviceInfo>{
 
 /// Collect a best-effort snapshot using unprivileged, standard Linux interfaces.
 pub fn collect() -> Snapshot {
-    let mut system=System::new_all(); system.refresh_all(); std::thread::sleep(Duration::from_millis(120));
+    let mut system=System::new_all(); system.refresh_all();
     system.refresh_cpu_usage(); system.refresh_memory();
     let cpus=system.cpus();
     let cpu_usage=if cpus.is_empty(){0.0}else{cpus.iter().map(|c|c.cpu_usage()).sum::<f32>()/cpus.len() as f32};
