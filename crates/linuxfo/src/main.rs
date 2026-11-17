@@ -363,6 +363,11 @@ fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
 }
 
 fn main() {
+    if std::env::args().nth(1).as_deref() == Some("--smart-scan") {
+        print!("{}", linuxfo_core::collect_disk_health_helper_json());
+        return;
+    }
+
     let app = adw::Application::builder()
         .application_id("io.linuxfo.SystemInfo")
         .build();
