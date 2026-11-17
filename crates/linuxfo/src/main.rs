@@ -1,6 +1,7 @@
 use adw::prelude::*;
 use gtk::{glib, Align, Orientation};
-use linuxfo_core::{collect, format_bytes, Snapshot};
+use linuxfo_core::{collect_with_system, format_bytes, Snapshot};
+use sysinfo::System;
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 const CSS: &str = r#"
@@ -77,6 +78,7 @@ fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
         "Cameras" => ("Cameras", "Video devices discovered without activating streams"),
         "Devices" => ("Hardware Devices", "USB and PCI device inventory"),
         "Network" => ("Network", "Interface traffic counters"),
+        "Processes" => ("Processes", "Live process activity, CPU load and resident memory"),
         _ => ("System Overview", "A live view of your Linux machine"),
     };
 
@@ -172,6 +174,30 @@ fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
             for device in snapshot.usb_devices.iter().chain(snapshot.pci_devices.iter()) {
                 root.append(&info_row(&device.name, &device.detail, &device.path));
             }
+        }
+        "Processes" => {
+            let summary = format!("{} processes • sorted by CPU usage • refreshes every 3 seconds", snapshot.processes.len());
+            root.append(&label(&summary, "muted"));
+            let list = gtk::ListBox::new();
+            list.add_css_class("boxed-list");
+            for process in &snapshot.processes {
+                let row = gtk::Box::new(Orientation::Horizontal, 12);
+                row.set_margin_top(7);
+                row.set_margin_bottom(7);
+                row.set_margin_start(12);
+                row.set_margin_end(12);
+                let identity = gtk::Box::new(Orientation::Vertical, 3);
+                identity.set_hexpand(true);
+                identity.append(&label(&process.name, "metric-small"));
+                identity.append(&label(&format!("PID {} • {}", process.pid, process.status), "muted"));
+                row.append(&identity);
+                row.append(&label(&format!("{:.1}%", process.cpu_percent), "accent"));
+                row.append(&label(&format_bytes(process.memory_bytes), "muted"));
+                let item = gtk::ListBoxRow::new();
+                item.set_child(Some(&row));
+                list.append(&item);
+            }
+            root.append(&list);
         }
         "Network" => {
             for network in &snapshot.networks {
@@ -296,9 +322,20 @@ fn main() {
         let window = adw::ApplicationWindow::builder()
             .application(app)
             .title("LinuxFo")
-            .default_width(1240)
-            .default_height(820)
+            .default_width(1380)
+            .default_height(900)
             .build();
+
+        // Keep native desktop window controls visible on KDE, GNOME and other GTK desktops.
+        let header = gtk::HeaderBar::new();
+        header.set_show_title_buttons(true);
+        let title_widget = gtk::Box::new(Orientation::Horizontal, 8);
+        let app_icon = gtk::Image::from_icon_name("io.linuxfo.SystemInfo");
+        app_icon.set_pixel_size(28);
+        title_widget.append(&app_icon);
+        title_widget.append(&label("LinuxFo", "brand"));
+        header.set_title_widget(Some(&title_widget));
+        window.set_titlebar(Some(&header));
 
         let shell = gtk::Box::new(Orientation::Horizontal, 0);
         let sidebar = gtk::Box::new(Orientation::Vertical, 14);
@@ -321,7 +358,7 @@ fn main() {
         stack.set_transition_type(gtk::StackTransitionType::Crossfade);
 
         let pages = [
-            "Overview", "CPU", "Memory", "Storage", "Thermals", "Cameras", "Devices", "Network",
+            "Overview", "CPU", "Memory", "Storage", "Thermals", "Cameras", "Devices", "Network", "Processes",
         ];
 
         let buttons = gtk::Box::new(Orientation::Vertical, 4);
@@ -340,6 +377,7 @@ fn main() {
                 "Thermals" => "⌁",
                 "Cameras" => "▣",
                 "Devices" => "◈",
+                "Processes" => "▥",
                 _ => "⌘",
             };
             button.set_label(Some(&format!("{symbol}   {page}")));
@@ -380,7 +418,8 @@ fn main() {
         top_bar.set_halign(Align::Fill);
         main_area.append(&top_bar);
 
-        let snapshot = Rc::new(RefCell::new(collect()));
+        let monitor = Rc::new(RefCell::new(System::new_all()));
+        let snapshot = Rc::new(RefCell::new(collect_with_system(&mut monitor.borrow_mut())));
         for page in pages {
             let widget = content_page(&snapshot.borrow(), page);
             stack.add_named(&widget, Some(page));
@@ -398,15 +437,20 @@ fn main() {
         window.present();
 
         let snapshot_ref = snapshot.clone();
+        let monitor_ref = monitor.clone();
         let stack_ref = stack.clone();
         glib::timeout_add_local(Duration::from_secs(3), move || {
-            *snapshot_ref.borrow_mut() = collect();
+            *snapshot_ref.borrow_mut() = collect_with_system(&mut monitor_ref.borrow_mut());
             let page = stack_ref
                 .visible_child_name()
                 .map(|name| name.to_string())
                 .unwrap_or_else(|| "Overview".into());
             let widget = content_page(&snapshot_ref.borrow(), &page);
-            stack_ref.set_visible_child(&widget);
+            if let Some(old_child) = stack_ref.visible_child() {
+                stack_ref.remove(&old_child);
+            }
+            stack_ref.add_named(&widget, Some(&page));
+            stack_ref.set_visible_child_name(&page);
             glib::ControlFlow::Continue
         });
     });
