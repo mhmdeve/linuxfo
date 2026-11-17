@@ -534,6 +534,7 @@ pub fn collect_with_system(system: &mut System) -> Snapshot {
         },
         memory: memory_info(),
         disks,
+        disk_health: collect_disk_health(),
         sensors: collect_sensors(),
         cameras: collect_video_devices(),
         usb_devices: collect_bus("/sys/bus/usb/devices", "USB"),
