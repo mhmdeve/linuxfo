@@ -326,7 +326,7 @@ fn main() {
 
         let buttons = gtk::Box::new(Orientation::Vertical, 4);
         let first = gtk::CheckButton::new();
-        first.set_label("◫   Overview");
+        first.set_label(Some("◫   Overview"));
         first.set_active(true);
         first.add_css_class("nav-button");
         buttons.append(&first);
@@ -342,7 +342,7 @@ fn main() {
                 "Devices" => "◈",
                 _ => "⌘",
             };
-            button.set_label(&format!("{symbol}   {page}"));
+            button.set_label(Some(&format!("{symbol}   {page}")));
             button.set_group(Some(&first));
             button.add_css_class("nav-button");
 
