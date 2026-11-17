@@ -401,16 +401,6 @@ fn main() {
         let main_area = gtk::Box::new(Orientation::Vertical, 0);
         main_area.set_hexpand(true);
 
-        let top_bar = gtk::Box::new(Orientation::Horizontal, 12);
-        top_bar.set_margin_top(14);
-        top_bar.set_margin_bottom(10);
-        top_bar.set_margin_start(30);
-        top_bar.set_margin_end(30);
-        top_bar.append(&label("SYSTEM INTELLIGENCE", "muted"));
-        top_bar.append(&label("●  LIVE", "pill"));
-        top_bar.set_halign(Align::Fill);
-        main_area.append(&top_bar);
-
         let monitor = Rc::new(RefCell::new(System::new_all()));
         let snapshot = Rc::new(RefCell::new(collect_with_system(&mut monitor.borrow_mut())));
         for page in pages {
