@@ -478,7 +478,20 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
                     };
                 }
             } else {
-                detail = "smartctl returned data that could not be parsed.".into();
+                let diagnostics = format!(
+                    "{} {}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                ).to_lowercase();
+                detail = if diagnostics.contains("not authorized")
+                    || diagnostics.contains("authentication")
+                    || diagnostics.contains("cancelled")
+                    || diagnostics.contains("not permitted")
+                {
+                    "Administrator authorization was cancelled or denied. Approve the system authentication prompt and refresh Disk Health to retry.".into()
+                } else {
+                    "smartctl returned data that could not be parsed.".into()
+                };
             }
         } else {
             detail = "smartmontools (smartctl) is not installed.".into();
