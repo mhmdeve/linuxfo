@@ -18,6 +18,29 @@ LinuxFo is written in Rust with GTK4/libadwaita. Linux hardware data is collecte
 
 GitHub Actions validates native GTK builds on x86_64 and AArch64. Version tags publish compressed binaries and SHA-256 checksums. Debian package builds target amd64/arm64; Fedora RPM and Arch PKGBUILD packaging have dedicated workflows. All native desktop packages require compatible GTK4/libadwaita runtime libraries. See [packaging/README.md](packaging/README.md) for the packaging matrix and limitations.
 
+## Install on Debian / Ubuntu
+
+Download the matching package from the GitHub Releases page:
+
+- `linuxfo_<version>_amd64.deb` for Intel/AMD 64-bit PCs.
+- `linuxfo_<version>_arm64.deb` for 64-bit ARM systems.
+
+Install it with APT so required GTK4 and libadwaita runtime libraries are installed automatically:
+
+```bash
+sudo apt install ./linuxfo_<version>_amd64.deb
+```
+
+For ARM64, use the `arm64` package filename instead. You can also install a downloaded package with:
+
+```bash
+sudo apt --fix-broken install
+```
+
+Launch LinuxFo from your desktop application menu or run `linuxfo` in a terminal.
+
+The raw CI binary is not a self-contained executable: it needs GTK4 and libadwaita installed by the operating system. Prefer the Debian package over copying the raw binary.
+
 ## Development
 
 See CONTRIBUTING.md and docs/architecture.md.
