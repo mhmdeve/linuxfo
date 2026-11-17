@@ -77,7 +77,7 @@ fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
     let (title, subtitle) = match page {
         "CPU" => ("Processor", "Architecture, topology and utilisation"),
         "Memory" => ("Memory", "Physical memory and swap usage"),
-        "Storage" => ("Storage", "Filesystems, devices and mount points"),
+        "Storage" => ("Storage", "Filesystems, devices and mount points"),\n        "Disk Health" => ("Disk Health", "SMART and NVMe drive condition, temperature and endurance"),
         "Thermals" => ("Thermals & Sensors", "Kernel-exposed temperature and telemetry channels"),
         "Cameras" => ("Cameras", "Video devices discovered without activating streams"),
         "Devices" => ("Hardware Devices", "USB and PCI device inventory"),
@@ -144,7 +144,7 @@ fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
                 ));
             }
         }
-        "Thermals" => {
+        "Disk Health" => {\n            if snapshot.disk_health.is_empty() {\n                root.append(&info_row("No physical drives found", "—", "No supported block devices were discovered under /sys/block."));\n            } else {\n                for disk in &snapshot.disk_health {\n                    let mut metrics = Vec::new();\n                    if let Some(temp) = disk.temperature_c { metrics.push(format!("{temp:.0} °C")); }\n                    if let Some(hours) = disk.power_on_hours { metrics.push(format!("{hours} power-on hours")); }\n                    if let Some(used) = disk.percentage_used { metrics.push(format!("{used}% endurance used")); }\n                    let extra = if metrics.is_empty() { disk.detail.clone() } else { format!("{} • {}", metrics.join(" • "), disk.detail) };\n                    root.append(&info_row(&format!("{} • {}", disk.device, disk.model), &disk.status, &format!("{} • {}", disk.kind, extra)));\n                }\n            }\n        }\n        "Thermals" => {
             if snapshot.sensors.is_empty() {
                 root.append(&info_row(
                     "No hwmon channels found",
@@ -351,7 +351,7 @@ fn main() {
         stack.set_transition_type(gtk::StackTransitionType::Crossfade);
 
         let pages = [
-            "Overview", "CPU", "Memory", "Storage", "Thermals", "Cameras", "Devices", "Network", "Processes",
+            "Overview", "CPU", "Memory", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes",
         ];
 
         let buttons = gtk::Box::new(Orientation::Vertical, 4);
@@ -366,7 +366,7 @@ fn main() {
             let symbol = match *page {
                 "CPU" => "◉",
                 "Memory" => "▤",
-                "Storage" => "▣",
+                "Storage" => "▣",\n                "Disk Health" => "♥",
                 "Thermals" => "⌁",
                 "Cameras" => "▣",
                 "Devices" => "◈",
