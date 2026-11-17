@@ -8,11 +8,11 @@ LinuxFo is a cross-distribution Linux system information centre. It brings hardw
 
 ![LinuxFo System Overview](preview/PREVIEW-1.png)
 
-### Disk Health
+### Storage
 
 ![LinuxFo Disk Health](preview/PREVIEW-2.png)
 
-### Storage
+### Disk Health
 
 ![LinuxFo Storage](preview/PREVIEW-3.png)
 
