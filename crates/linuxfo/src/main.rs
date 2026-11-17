@@ -5,96 +5,29 @@ use sysinfo::System;
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 const CSS: &str = r#"
-* {
-    font-family: "Inter", "Noto Sans", "Cantarell", sans-serif;
-}
-window { background: #f7f8f7; color: #202522; }
-headerbar {
-    background: #ffffff;
-    color: #202522;
-    border-bottom: 1px solid #e8ebe8;
-    min-height: 54px;
-    box-shadow: none;
-}
-.sidebar { background: #ffffff; border-right: 1px solid #e8ebe8; }
-.brand {
-    font-size: 23px;
-    font-weight: 800;
-    letter-spacing: -0.9px;
-    color: #171c19;
-}
-.brand-mark {
-    background: #202722;
-    color: #ffffff;
-    border-radius: 11px;
-    padding: 8px 9px;
-    font-size: 13px;
-    font-weight: 800;
-}
-.nav-button {
-    background: transparent;
-    color: #626b65;
-    border: 1px solid transparent;
-    border-radius: 10px;
-    padding: 10px 12px;
-    min-height: 20px;
-    font-size: 13px;
-    font-weight: 550;
-    text-align: left;
-}
-.nav-button:hover { background: #f5f7f5; color: #202722; }
-.nav-button:checked {
-    background: #edf5ef;
-    color: #216b3c;
-    border: 1px solid #e1eee4;
-    font-weight: 700;
-}
-.page-title {
-    font-size: 30px;
-    font-weight: 750;
-    letter-spacing: -1.0px;
-    color: #171c19;
-}
-.muted { color: #7b847e; font-size: 12px; }
-.card {
-    background: #ffffff;
-    color: #202522;
-    border: 1px solid #e6eae6;
-    border-radius: 15px;
-    padding: 19px;
-    box-shadow: 0 2px 8px alpha(#17251b, 0.035);
-}
-.card-title {
-    color: #78817a;
-    font-size: 11px;
-    font-weight: 750;
-    letter-spacing: 0.8px;
-}
-.metric {
-    font-size: 29px;
-    font-weight: 750;
-    letter-spacing: -0.8px;
-    color: #1b211d;
-}
-.metric-small { font-size: 14px; font-weight: 650; color: #252d28; }
-.accent { color: #27834a; font-weight: 700; }
-.pill {
-    background: #eaf5ed;
-    color: #267442;
-    border-radius: 20px;
-    padding: 5px 9px;
-    font-size: 11px;
-    font-weight: 700;
-}
-boxedlist, list {
-    background: #ffffff;
-    color: #202522;
-    border: 1px solid #e6eae6;
-    border-radius: 13px;
-}
-list row { background: transparent; border-bottom: 1px solid #edf0ed; }
+* { font-family: "Inter", "Noto Sans", "Cantarell", sans-serif; }
+window { background: #e9ebe8; color: #252a26; }
+headerbar { background: #e5e8e3; color: #252a26; border-bottom: 1px solid alpha(currentColor, 0.10); min-height: 54px; }
+.sidebar { background: #e5e8e3; border-right: 1px solid alpha(currentColor, 0.10); }
+.brand { font-size: 23px; font-weight: 800; letter-spacing: -0.9px; color: #202621; }
+.brand-mark { background: #343d36; color: #f4f5f1; border-radius: 11px; padding: 8px 9px; font-size: 13px; font-weight: 800; }
+.nav-button { background: transparent; color: #606a62; border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; min-height: 20px; font-size: 13px; font-weight: 550; text-align: left; }
+.nav-button:hover { background: alpha(currentColor, 0.06); color: #252d27; }
+.nav-button:checked { background: #dce8dd; color: #28633a; border: 1px solid #d0dfd2; font-weight: 700; }
+.page-title { font-size: 30px; font-weight: 750; letter-spacing: -1px; color: #202621; }
+.muted { color: #727b74; font-size: 12px; }
+.card { background: #f5f6f2; color: #252a26; border: 1px solid #d9ded8; border-radius: 15px; padding: 19px; box-shadow: 0 2px 7px alpha(#202820, 0.045); }
+.card-title { color: #747d75; font-size: 11px; font-weight: 750; letter-spacing: 0.8px; }
+.metric { font-size: 29px; font-weight: 750; letter-spacing: -0.8px; color: #202621; }
+.metric-small { font-size: 14px; font-weight: 650; color: #2b332d; }
+.accent { color: #34794a; font-weight: 700; }
+.pill { background: #dce9dd; color: #28633a; border-radius: 20px; padding: 5px 9px; font-size: 11px; font-weight: 700; }
+boxedlist, list { background: #f5f6f2; color: #252a26; border: 1px solid #d9ded8; border-radius: 13px; }
+list row { background: transparent; border-bottom: 1px solid #e2e6e0; }
 list row:last-child { border-bottom: none; }
-separator { background: #e8ebe8; }
+progressbar trough { background: #dce1da; border-radius: 8px; min-height: 8px; }
+progressbar progress { background: #438354; border-radius: 8px; min-height: 8px; }
+separator { background: #d8ded7; }
 scrolledwindow { background: transparent; }
 "#;
 
