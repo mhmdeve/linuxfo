@@ -55,6 +55,10 @@ Launch LinuxFo from your desktop application menu or run `linuxfo` in a terminal
 
 The raw CI binary is not a self-contained executable: it needs GTK4 and libadwaita installed by the operating system. Prefer the Debian package over copying the raw binary.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release notes and project changes.
+
 ## Development
 
 See CONTRIBUTING.md and docs/architecture.md.
