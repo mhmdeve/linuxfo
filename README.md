@@ -63,3 +63,14 @@ sudo usermod -aG video "$USER"
 ```
 
 Sign out and sign back in for the group change to take effect. Some distributions use a different device group or access policy; follow the permissions shown for the actual device. Native Debian packages do not use Flatpak's camera permission portal.
+
+## License
+
+LinuxFo is open source software licensed under the [MIT License](LICENSE).
+
+Copyright (c) 2026 Muhammad Hamza Mushtaq.
+
+You are free to use LinuxFo for personal or commercial purposes, study it, modify it, and redistribute original or modified copies. When redistributing the software or substantial portions of it, you must retain the copyright notice and MIT permission notice. The license does not transfer ownership of the copyright or require you to release your modifications.
+
+The software is provided "as is", without warranty. See the [LICENSE](LICENSE) file for the complete terms.
+
