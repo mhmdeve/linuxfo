@@ -511,7 +511,7 @@ fn collect_disk_health() -> Vec<DiskHealthInfo> {
     static CACHE: OnceLock<Mutex<(Option<Instant>, Vec<DiskHealthInfo>)>> = OnceLock::new();
     let cache = CACHE.get_or_init(|| Mutex::new((None, Vec::new())));
     let Ok(mut guard) = cache.lock() else { return collect_disk_health_uncached(); };
-    let fresh = guard.0.map(|time| time.elapsed().as_secs() < 60).unwrap_or(false);
+    let fresh = guard.0.map(|time| time.elapsed().as_secs() < 900).unwrap_or(false);
     if !fresh {
         guard.1 = collect_disk_health_uncached();
         guard.0 = Some(Instant::now());
