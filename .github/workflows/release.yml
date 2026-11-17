@@ -38,7 +38,7 @@ jobs:
           ROOT="pkg/$PKG"
           mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/share/doc/linuxfo"
           install -m 0755 target/release/linuxfo "$ROOT/usr/bin/linuxfo"
-          install -m 0644 packaging/linuxfo.desktop "$ROOT/usr/share/applications/linuxfo.desktop"
+          install -m 0644 packaging/io.linuxfo.SystemInfo.desktop "$ROOT/usr/share/applications/io.linuxfo.SystemInfo.desktop"
           install -m 0644 README.md LICENSE "$ROOT/usr/share/doc/linuxfo/"
           cat > "$ROOT/DEBIAN/control" <<EOF
           Package: linuxfo
@@ -60,7 +60,7 @@ jobs:
           mkdir -p "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}"
           install -m 0755 target/release/linuxfo "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}/linuxfo"
           install -m 0644 README.md LICENSE "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}/"
-          install -m 0644 packaging/linuxfo.desktop "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}/"
+          install -m 0644 packaging/io.linuxfo.SystemInfo.desktop "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}/"
           tar -C bundle -czf "linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}.tar.gz" "linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}"
           sha256sum "linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}.tar.gz" > "linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}.tar.gz.sha256"
       - uses: actions/upload-artifact@v4
