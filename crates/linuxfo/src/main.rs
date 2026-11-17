@@ -353,6 +353,45 @@ fn main() {
         let header = gtk::HeaderBar::new();
         header.set_show_title_buttons(true);
         header.set_title_widget(Some(&gtk::Label::new(Some("LinuxFo"))));
+
+        let style_manager = adw::StyleManager::default();
+        let theme_button = gtk::MenuButton::new();
+        theme_button.set_icon_name("applications-graphics-symbolic");
+        theme_button.set_tooltip_text(Some("Appearance"));
+        let theme_popover = gtk::Popover::new();
+        let theme_box = gtk::Box::new(Orientation::Vertical, 4);
+        theme_box.set_margin_top(8);
+        theme_box.set_margin_bottom(8);
+        theme_box.set_margin_start(8);
+        theme_box.set_margin_end(8);
+        let theme_system = gtk::CheckButton::with_label("Follow system");
+        let theme_light = gtk::CheckButton::with_label("Light");
+        let theme_dark = gtk::CheckButton::with_label("Dark");
+        theme_light.set_group(Some(&theme_system));
+        theme_dark.set_group(Some(&theme_system));
+        match style_manager.color_scheme() {
+            adw::ColorScheme::ForceLight => theme_light.set_active(true),
+            adw::ColorScheme::ForceDark => theme_dark.set_active(true),
+            _ => theme_system.set_active(true),
+        }
+        let manager = style_manager.clone();
+        theme_system.connect_toggled(move |button| {
+            if button.is_active() { manager.set_color_scheme(adw::ColorScheme::Default); }
+        });
+        let manager = style_manager.clone();
+        theme_light.connect_toggled(move |button| {
+            if button.is_active() { manager.set_color_scheme(adw::ColorScheme::ForceLight); }
+        });
+        let manager = style_manager.clone();
+        theme_dark.connect_toggled(move |button| {
+            if button.is_active() { manager.set_color_scheme(adw::ColorScheme::ForceDark); }
+        });
+        theme_box.append(&theme_system);
+        theme_box.append(&theme_light);
+        theme_box.append(&theme_dark);
+        theme_popover.set_child(Some(&theme_box));
+        theme_button.set_popover(Some(&theme_popover));
+        header.pack_end(&theme_button);
         window.set_titlebar(Some(&header));
 
         let shell = gtk::Box::new(Orientation::Horizontal, 0);
