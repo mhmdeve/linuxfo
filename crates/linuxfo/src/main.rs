@@ -176,7 +176,26 @@ fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
                     if let Some(hours) = disk.power_on_hours { metrics.push(format!("{hours} power-on hours")); }
                     if let Some(used) = disk.percentage_used { metrics.push(format!("{used}% endurance used")); }
                     let extra = if metrics.is_empty() { disk.detail.clone() } else { format!("{} • {}", metrics.join(" • "), disk.detail) };
-                    root.append(&info_row(&format!("{} • {}", disk.device, disk.model), &disk.status, &format!("{} • {}", disk.kind, extra)));
+                    let card = gtk::Box::new(Orientation::Vertical, 10);
+                    card.add_css_class("card");
+                    let heading = gtk::Box::new(Orientation::Horizontal, 8);
+                    let identity = gtk::Box::new(Orientation::Vertical, 3);
+                    identity.set_hexpand(true);
+                    identity.append(&label(&format!("{} • {}", disk.device, disk.model), "metric-small"));
+                    identity.append(&label(&disk.kind, "muted"));
+                    heading.append(&identity);
+                    heading.append(&label(&disk.status, "accent"));
+                    card.append(&heading);
+                    if let Some(used) = disk.percentage_used {
+                        let used = used.min(100);
+                        let remaining = 100u64.saturating_sub(used);
+                        card.append(&label(&format!("SSD endurance  •  {remaining}% remaining  /  {used}% used"), "metric-small"));
+                        let bar = gtk::ProgressBar::new();
+                        bar.set_fraction(used as f64 / 100.0);
+                        card.append(&bar);
+                    }
+                    card.append(&label(&extra, "muted"));
+                    root.append(&card);
                 }
             }
         }
