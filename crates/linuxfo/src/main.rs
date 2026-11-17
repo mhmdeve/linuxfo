@@ -347,9 +347,10 @@ fn main() {
             button.add_css_class("nav-button");
 
             let stack_ref = stack.clone();
+            let page_name = *page;
             button.connect_toggled(move |button| {
                 if button.is_active() {
-                    stack_ref.set_visible_child_name(page);
+                    stack_ref.set_visible_child_name(page_name);
                 }
             });
             buttons.append(&button);
