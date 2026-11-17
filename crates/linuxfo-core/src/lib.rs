@@ -3,7 +3,7 @@
 //! Discovery uses standard Linux kernel interfaces and never requires root.
 //! Missing drivers, permissions, or devices are reported as missing data.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -47,7 +47,7 @@ pub struct DiskInfo {
     pub removable: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiskHealthInfo {
     pub device: String,
     pub model: String,
@@ -369,7 +369,7 @@ fn collect_bus(root: &str, bus: &str) -> Vec<DeviceInfo> {
 fn is_effective_root() -> bool {
     fs::read_to_string("/proc/self/status").ok()
         .and_then(|status| status.lines().find(|line| line.starts_with("Uid:")).map(str::to_string))
-        .and_then(|line| line.split_whitespace().nth(2).and_then(|uid| uid.parse::<u32>().ok())) == Some(0)
+        .and_then(|line| line.split_whitespace().nth(1).and_then(|uid| uid.parse::<u32>().ok())) == Some(0)
 }
 
 pub fn collect_disk_health_helper_json() -> String {
