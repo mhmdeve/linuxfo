@@ -1,9 +1,0 @@
-[Desktop Entry]
-Name=LinuxFo
-Comment=Complete Linux system information and hardware monitor
-Exec=linuxfo
-Icon=io.linuxfo.SystemInfo
-Terminal=false
-Type=Application
-Categories=System;Monitor;HardwareSettings;
-StartupNotify=true
