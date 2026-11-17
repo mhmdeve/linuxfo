@@ -1,0 +1,52 @@
+name: LinuxFo RPM packages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rpm:
+    name: Fedora RPM (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build RPM in Fedora container
+        run: |
+          docker run --rm --platform linux/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }} -v "$PWD:/src" -w /src fedora:42 bash -lc '
+            dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel rust cargo rpm-build
+            cargo build --release -p linuxfo
+            mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+            cat > /root/rpmbuild/SPECS/linuxfo.spec <<EOF
+Name: linuxfo
+Version: 0.1.0
+Release: 1%{?dist}
+Summary: Linux system information and hardware monitor
+License: MIT
+Requires: gtk4, libadwaita
+BuildArch: %{_arch}
+%description
+LinuxFo hardware and system information desktop application.
+%install
+mkdir -p %{buildroot}/usr/bin
+install -m 0755 /src/target/release/linuxfo %{buildroot}/usr/bin/linuxfo
+%files
+/usr/bin/linuxfo
+EOF
+            rpmbuild -bb /root/rpmbuild/SPECS/linuxfo.spec
+            mkdir -p /src/rpm-out
+            cp /root/rpmbuild/RPMS/*/*.rpm /src/rpm-out/
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rpm-${{ matrix.arch }}
+          path: rpm-out/*.rpm
