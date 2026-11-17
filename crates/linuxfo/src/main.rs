@@ -186,15 +186,31 @@ fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
                     heading.append(&identity);
                     heading.append(&label(&disk.status, "accent"));
                     card.append(&heading);
-                    if let Some(used) = disk.percentage_used {
-                        let used = used.min(100);
-                        let remaining = 100u64.saturating_sub(used);
-                        card.append(&label(&format!("SSD endurance  •  {remaining}% remaining  /  {used}% used"), "metric-small"));
-                        let bar = gtk::ProgressBar::new();
-                        bar.set_fraction(used as f64 / 100.0);
-                        card.append(&bar);
+                    let metrics_grid = gtk::Grid::new();
+                    metrics_grid.set_column_spacing(18);
+                    metrics_grid.set_row_spacing(8);
+                    let health_text = disk.health_percent.map(|v| format!("{:.0}%", v.clamp(0.0, 100.0))).unwrap_or_else(|| "Unavailable".into());
+                    let performance_text = disk.performance_percent.map(|v| format!("{:.0}%", v.clamp(0.0, 100.0))).unwrap_or_else(|| "Sampling…".into());
+                    metrics_grid.attach(&label("HEALTH", "card-title"), 0, 0, 1, 1);
+                    metrics_grid.attach(&label("DISK ACTIVITY", "card-title"), 1, 0, 1, 1);
+                    metrics_grid.attach(&label(&health_text, "metric-small"), 0, 1, 1, 1);
+                    metrics_grid.attach(&label(&performance_text, "metric-small"), 1, 1, 1, 1);
+                    for (column, value) in [(0, disk.health_percent), (1, disk.performance_percent)] {
+                        if let Some(value) = value {
+                            let bar = gtk::ProgressBar::new();
+                            bar.set_fraction(value.clamp(0.0, 100.0) / 100.0);
+                            metrics_grid.attach(&bar, column, 2, 1, 1);
+                        }
                     }
-                    card.append(&label(&extra, "muted"));
+                    card.append(&metrics_grid);
+                    let health_note = if disk.percentage_used.is_some() {
+                        "NVMe health is derived from remaining rated endurance"
+                    } else if disk.health_percent.is_some() {
+                        "Health reflects the drive's SMART pass/fail assessment, not remaining lifespan"
+                    } else {
+                        "Drive does not expose a usable SMART health percentage"
+                    };
+                    card.append(&label(&format!("{} • Disk activity is busy time, not a speed score • {}", extra, health_note), "muted"));
                     root.append(&card);
                 }
             }
