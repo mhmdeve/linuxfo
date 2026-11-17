@@ -11,9 +11,17 @@ headerbar { background: #e5e8e3; color: #252a26; border-bottom: 1px solid alpha(
 .sidebar { background: #e5e8e3; border-right: 1px solid alpha(currentColor, 0.10); }
 .brand { font-size: 23px; font-weight: 800; letter-spacing: -0.9px; color: #202621; }
 .brand-mark { background: #343d36; color: #f4f5f1; border-radius: 11px; padding: 8px 9px; font-size: 13px; font-weight: 800; }
-.nav-button { background: transparent; color: #606a62; border: 1px solid transparent; border-radius: 10px; padding: 10px 12px; min-height: 20px; font-size: 13px; font-weight: 550; text-align: left; }
-.nav-button:hover { background: alpha(currentColor, 0.06); color: #252d27; }
-.nav-button:checked { background: #dce8dd; color: #28633a; border: 1px solid #d0dfd2; font-weight: 700; }
+.nav-button { background: transparent; color: #69736b; border: 1px solid transparent; border-radius: 12px; padding: 0; min-height: 44px; font-size: 13px; font-weight: 600; text-align: left; box-shadow: none; }
+.nav-button > box { padding: 0 12px; }
+.nav-icon { min-width: 22px; font-size: 16px; color: #87938a; }
+.nav-label { font-size: 13px; font-weight: 600; }
+.brand-panel { background: alpha(currentColor, 0.035); border: 1px solid alpha(currentColor, 0.07); border-radius: 15px; padding: 12px; }
+.brand-logo { min-width: 38px; min-height: 38px; }
+.nav-section { margin-top: 8px; margin-bottom: 4px; }
+.nav-button:hover { background: alpha(currentColor, 0.07); color: #252d27; }
+.nav-button:checked { background: #dce8dd; color: #28633a; border: 1px solid #cbdccc; font-weight: 700; box-shadow: 0 1px 3px alpha(#203526, 0.07); }
+.nav-button:checked .nav-icon { color: #34794a; }
+.nav-button:checked .nav-label { color: #28633a; font-weight: 750; }
 .page-title { font-size: 30px; font-weight: 750; letter-spacing: -1px; color: #202621; }
 .muted { color: #727b74; font-size: 12px; }
 .card { background: #f5f6f2; color: #252a26; border: 1px solid #d9ded8; border-radius: 15px; padding: 19px; box-shadow: 0 2px 7px alpha(#202820, 0.045); }
@@ -35,8 +43,11 @@ window.dark .sidebar { border-right-color: #39413a; }
 window.dark .brand, window.dark .page-title, window.dark .metric { color: #edf1eb; }
 window.dark .brand-mark { background: #dce8dc; color: #263229; }
 window.dark .nav-button { color: #b7c0b8; }
+window.dark .brand-panel { background: #202720; border-color: #39443b; }
+window.dark .nav-icon { color: #849188; }
 window.dark .nav-button:hover { background: #303a32; color: #ffffff; }
 window.dark .nav-button:checked { background: #314637; color: #bce3c3; border-color: #405947; }
+window.dark .nav-button:checked .nav-label, window.dark .nav-button:checked .nav-icon { color: #bce3c3; }
 window.dark .card, window.dark boxedlist, window.dark list { background: #2b322c; color: #e5e9e4; border-color: #414a42; }
 window.dark .metric-small { color: #e0e7df; }
 window.dark .muted { color: #a0aaa1; }
@@ -465,11 +476,18 @@ fn main() {
         sidebar.set_margin_end(14);
         sidebar.add_css_class("sidebar");
 
+        let brand_panel = gtk::Box::new(Orientation::Vertical, 8);
+        brand_panel.add_css_class("brand-panel");
         let brand = gtk::Box::new(Orientation::Horizontal, 10);
-        brand.append(&label("LF", "brand-mark"));
+        brand.set_valign(Align::Center);
+        let logo = gtk::Image::from_icon_name("io.linuxfo.SystemInfo");
+        logo.set_pixel_size(40);
+        logo.add_css_class("brand-logo");
+        brand.append(&logo);
         brand.append(&label("LinuxFo", "brand"));
-        sidebar.append(&brand);
-        sidebar.append(&label("YOUR SYSTEM, IN FOCUS", "muted"));
+        brand_panel.append(&brand);
+        brand_panel.append(&label("YOUR SYSTEM, IN FOCUS", "muted"));
+        sidebar.append(&brand_panel);
 
         let stack = gtk::Stack::new();
         stack.set_hexpand(true);
@@ -485,15 +503,19 @@ fn main() {
             "Overview", "CPU", "Memory", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes",
         ];
 
-        let buttons = gtk::Box::new(Orientation::Vertical, 4);
-        let first = gtk::CheckButton::new();
-        first.set_label(Some("◫   Overview"));
+        let buttons = gtk::Box::new(Orientation::Vertical, 5);
+        buttons.add_css_class("nav-section");
+        let first = gtk::ToggleButton::new();
+        let first_row = gtk::Box::new(Orientation::Horizontal, 10);
+        first_row.append(&label("⌂", "nav-icon"));
+        first_row.append(&label("Overview", "nav-label"));
+        first.set_child(Some(&first_row));
         first.set_active(true);
         first.add_css_class("nav-button");
         buttons.append(&first);
 
         for page in pages.iter().skip(1) {
-            let button = gtk::CheckButton::new();
+            let button = gtk::ToggleButton::new();
             let symbol = match *page {
                 "CPU" => "◉",
                 "Memory" => "▤",
@@ -501,11 +523,14 @@ fn main() {
                 "Disk Health" => "♥",
                 "Thermals" => "⌁",
                 "Cameras" => "▣",
-                "Devices" => "◈",
+                "Devices" => "◇",
                 "Processes" => "▥",
                 _ => "⌘",
             };
-            button.set_label(Some(&format!("{symbol}   {page}")));
+            let row = gtk::Box::new(Orientation::Horizontal, 10);
+            row.append(&label(symbol, "nav-icon"));
+            row.append(&label(page, "nav-label"));
+            button.set_child(Some(&row));
             button.set_group(Some(&first));
             button.add_css_class("nav-button");
 
