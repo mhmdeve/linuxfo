@@ -5,24 +5,96 @@ use sysinfo::System;
 use std::{cell::RefCell, rc::Rc, time::Duration};
 
 const CSS: &str = r#"
-window { background: #11151d; color: #edf2f7; }
-headerbar { background: #171d27; border-bottom: 1px solid #293342; min-height: 48px; }
-.sidebar { background: #171d27; border-right: 1px solid #293342; }
-.brand { font-size: 22px; font-weight: 800; letter-spacing: -0.8px; color: #f4f7fb; }
-.brand-mark { background: linear-gradient(135deg,#28d7c1,#6d5dfc); color: #07131b; border-radius: 12px; padding: 8px; font-weight: 900; }
-.nav-button { background: transparent; color: #aab6c6; border-radius: 10px; padding: 10px 12px; text-align: left; }
-.nav-button:hover,.nav-button:checked { background: #26313e; color: #fff; }
-.page-title { font-size: 29px; font-weight: 750; letter-spacing: -0.7px; }
-.muted { color: #91a0b2; }
-.card { background: #1b2430; border: 1px solid #303d4d; border-radius: 16px; padding: 18px; }
-.card-title { color: #9eafc1; font-size: 12px; font-weight: 700; letter-spacing: 0.7px; }
-.metric { font-size: 28px; font-weight: 750; color: #f5f7fb; }
-.metric-small { font-size: 15px; font-weight: 650; color: #f5f7fb; }
-.accent { color: #40ddc4; font-weight: 700; }
-.pill { background: #183c39; color: #70ead8; border-radius: 20px; padding: 5px 9px; font-size: 11px; }
-boxedlist, list { background: #1b2430; border: 1px solid #303d4d; border-radius: 12px; }
-list row { border-bottom: 1px solid #303d4d; }
-separator { background: #303d4d; }
+* {
+    font-family: "Inter", "Noto Sans", "Cantarell", sans-serif;
+}
+window { background: #f7f8f7; color: #202522; }
+headerbar {
+    background: #ffffff;
+    color: #202522;
+    border-bottom: 1px solid #e8ebe8;
+    min-height: 54px;
+    box-shadow: none;
+}
+.sidebar { background: #ffffff; border-right: 1px solid #e8ebe8; }
+.brand {
+    font-size: 23px;
+    font-weight: 800;
+    letter-spacing: -0.9px;
+    color: #171c19;
+}
+.brand-mark {
+    background: #202722;
+    color: #ffffff;
+    border-radius: 11px;
+    padding: 8px 9px;
+    font-size: 13px;
+    font-weight: 800;
+}
+.nav-button {
+    background: transparent;
+    color: #626b65;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 10px 12px;
+    min-height: 20px;
+    font-size: 13px;
+    font-weight: 550;
+    text-align: left;
+}
+.nav-button:hover { background: #f5f7f5; color: #202722; }
+.nav-button:checked {
+    background: #edf5ef;
+    color: #216b3c;
+    border: 1px solid #e1eee4;
+    font-weight: 700;
+}
+.page-title {
+    font-size: 30px;
+    font-weight: 750;
+    letter-spacing: -1.0px;
+    color: #171c19;
+}
+.muted { color: #7b847e; font-size: 12px; }
+.card {
+    background: #ffffff;
+    color: #202522;
+    border: 1px solid #e6eae6;
+    border-radius: 15px;
+    padding: 19px;
+    box-shadow: 0 2px 8px alpha(#17251b, 0.035);
+}
+.card-title {
+    color: #78817a;
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.8px;
+}
+.metric {
+    font-size: 29px;
+    font-weight: 750;
+    letter-spacing: -0.8px;
+    color: #1b211d;
+}
+.metric-small { font-size: 14px; font-weight: 650; color: #252d28; }
+.accent { color: #27834a; font-weight: 700; }
+.pill {
+    background: #eaf5ed;
+    color: #267442;
+    border-radius: 20px;
+    padding: 5px 9px;
+    font-size: 11px;
+    font-weight: 700;
+}
+boxedlist, list {
+    background: #ffffff;
+    color: #202522;
+    border: 1px solid #e6eae6;
+    border-radius: 13px;
+}
+list row { background: transparent; border-bottom: 1px solid #edf0ed; }
+list row:last-child { border-bottom: none; }
+separator { background: #e8ebe8; }
 scrolledwindow { background: transparent; }
 "#;
 
