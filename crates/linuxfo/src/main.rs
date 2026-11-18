@@ -105,6 +105,22 @@ fn sysfs_value(path: &std::path::Path) -> String {
     std::fs::read_to_string(path).map(|v| v.trim().to_string()).unwrap_or_else(|_| "—".into())
 }
 
+fn page_scroller(child: &gtk::Widget) -> gtk::ScrolledWindow {
+    let scroller = gtk::ScrolledWindow::new();
+    scroller.set_hexpand(true);
+    scroller.set_vexpand(true);
+    scroller.set_child(Some(child));
+    scroller
+}
+
+fn reset_visible_page_scroll(stack: &gtk::Stack) {
+    if let Some(scroller) = stack.visible_child()
+        .and_then(|child| child.downcast::<gtk::ScrolledWindow>().ok())
+    {
+        scroller.vadjustment().set_value(0.0);
+    }
+}
+
 fn driver_inventory_page() -> gtk::Widget {
     let root = gtk::Box::new(Orientation::Vertical, 14);
     root.append(&section_header("Drivers & Hardware", "Kernel drivers and device bindings reported by Linux sysfs"));
@@ -759,14 +775,9 @@ fn main() {
 
         let stack = gtk::Stack::new();
         stack.set_hexpand(true);
-        stack.set_vexpand(false);
-        stack.set_valign(Align::Start);
+        stack.set_vexpand(true);
+        stack.set_valign(Align::Fill);
         stack.set_transition_type(gtk::StackTransitionType::Crossfade);
-
-        let scroller = gtk::ScrolledWindow::new();
-        scroller.set_vexpand(true);
-        scroller.set_hexpand(true);
-        scroller.set_child(Some(&stack));
 
         let pages = [
             "Overview", "CPU", "Memory", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes", "Drivers", "Journal",
@@ -806,23 +817,21 @@ fn main() {
             button.add_css_class("nav-button");
 
             let stack_ref = stack.clone();
-            let scroller_ref = scroller.clone();
             let page_name = *page;
             button.connect_toggled(move |button| {
                 if button.is_active() {
                     stack_ref.set_visible_child_name(page_name);
-                    scroller_ref.vadjustment().set_value(0.0);
+                    reset_visible_page_scroll(&stack_ref);
                 }
             });
             buttons.append(&button);
         }
 
         let stack_ref = stack.clone();
-        let scroller_ref = scroller.clone();
         first.connect_toggled(move |button| {
             if button.is_active() {
                 stack_ref.set_visible_child_name("Overview");
-                scroller_ref.vadjustment().set_value(0.0);
+                reset_visible_page_scroll(&stack_ref);
             }
         });
 
@@ -838,10 +847,11 @@ fn main() {
         let process_filter = Rc::new(RefCell::new(String::new()));
         for page in pages {
             let widget = content_page(&snapshot.borrow(), page, monitor.clone(), process_filter.clone());
-            stack.add_named(&widget, Some(page));
+            let page_scroller = page_scroller(&widget);
+            stack.add_named(&page_scroller, Some(page));
         }
 
-        main_area.append(&scroller);
+        main_area.append(&stack);
 
         shell.append(&sidebar);
         shell.append(&main_area);
@@ -859,10 +869,11 @@ fn main() {
                 .unwrap_or_else(|| "Overview".into());
             if page == "Journal" || page == "Drivers" { return glib::ControlFlow::Continue; }
             let widget = content_page(&snapshot_ref.borrow(), &page, monitor_ref.clone(), process_filter.clone());
+            let page_scroller = page_scroller(&widget);
             if let Some(old_child) = stack_ref.visible_child() {
                 stack_ref.remove(&old_child);
             }
-            stack_ref.add_named(&widget, Some(&page));
+            stack_ref.add_named(&page_scroller, Some(&page));
             stack_ref.set_visible_child_name(&page);
             glib::ControlFlow::Continue
         });
