@@ -377,6 +377,11 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                                 .map(|(_, process)| process.kill())
                                 .unwrap_or(false);
                             if killed {
+                                // The GTK response callback is Fn and may be invoked more than once,
+                                // so clone the launch data before moving it into the one-shot timer.
+                                let executable = executable.clone();
+                                let args = args.clone();
+                                let cwd = cwd.clone();
                                 glib::timeout_add_local_once(Duration::from_millis(700), move || {
                                     let mut command = std::process::Command::new(executable);
                                     command.args(args);
