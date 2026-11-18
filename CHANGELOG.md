@@ -4,6 +4,18 @@ All notable changes to LinuxFo are documented in this file.
 
 This project follows a simplified version of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and uses the version number defined in the Cargo workspace.
 
+## [0.2.0] - 2026-11-18
+
+### Added
+- Search processes by process name, PID, or status.
+- Kill selected processes with a confirmation prompt.
+- Restart eligible processes by relaunching their executable with the captured arguments and working directory.
+- Display matching-process count and keep process actions available directly in the Processes page.
+
+### Notes
+- Process actions run with the current user's permissions and do not automatically elevate privileges.
+- Restarting systemd-managed services or processes requiring special launch environments may not work reliably.
+
 ## [0.1.0] - 2026-11-17
 
 ### Added
