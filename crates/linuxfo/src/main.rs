@@ -100,6 +100,144 @@ fn info_row(title: &str, value: &str, detail: &str) -> gtk::Box {
     widget
 }
 
+
+fn sysfs_value(path: &std::path::Path) -> String {
+    std::fs::read_to_string(path).map(|v| v.trim().to_string()).unwrap_or_else(|_| "—".into())
+}
+
+fn driver_inventory_page() -> gtk::Widget {
+    let root = gtk::Box::new(Orientation::Vertical, 14);
+    root.append(&section_header("Drivers & Hardware", "Kernel drivers and device bindings reported by Linux sysfs"));
+
+    let mut entries: Vec<(String, String, String)> = Vec::new();
+    for (bus, title) in [("pci", "PCI"), ("usb", "USB")] {
+        let base = std::path::PathBuf::from(format!("/sys/bus/{bus}/devices"));
+        if let Ok(devices) = std::fs::read_dir(base) {
+            for device in devices.flatten() {
+                let path = device.path();
+                let id = device.file_name().to_string_lossy().to_string();
+                let vendor = sysfs_value(&path.join("vendor"));
+                let product = sysfs_value(&path.join("device"));
+                let class = sysfs_value(&path.join("class"));
+                let driver = std::fs::read_link(path.join("driver"))
+                    .ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+                    .unwrap_or_else(|| "No driver bound".into());
+                let modalias = sysfs_value(&path.join("modalias"));
+                entries.push((format!("{title} • {id}"), format!("Vendor {vendor} • Device {product} • Class {class}"), format!("Driver: {driver} • {modalias}")));
+            }
+        }
+    }
+
+    if let Ok(interfaces) = std::fs::read_dir("/sys/class/net") {
+        for interface in interfaces.flatten() {
+            let path = interface.path();
+            let name = interface.file_name().to_string_lossy().to_string();
+            let driver = std::fs::read_link(path.join("device/driver"))
+                .ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+                .unwrap_or_else(|| "Virtual / driver not exposed".into());
+            let address = sysfs_value(&path.join("address"));
+            let wireless = path.join("wireless").exists() || path.join("phy80211").exists();
+            entries.push((format!("Network • {name}"), if wireless { "Wi-Fi interface".into() } else { "Network interface".into() }, format!("Driver: {driver} • MAC: {address}")));
+        }
+    }
+
+    if let Ok(radios) = std::fs::read_dir("/sys/class/bluetooth") {
+        for radio in radios.flatten() {
+            let name = radio.file_name().to_string_lossy().to_string();
+            let path = radio.path();
+            let driver = std::fs::read_link(path.join("device/driver"))
+                .ok().and_then(|p| p.file_name().map(|n| n.to_string_lossy().to_string()))
+                .unwrap_or_else(|| "Driver not exposed".into());
+            entries.push((format!("Bluetooth • {name}"), "Bluetooth controller".into(), format!("Driver: {driver}")));
+        }
+    }
+
+    let fingerprint = std::process::Command::new("fprintd-list").arg(std::env::var("USER").unwrap_or_default()).output();
+    if let Ok(output) = fingerprint {
+        let detail = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if output.status.success() && !detail.is_empty() {
+            entries.push(("Fingerprint reader".into(), "Detected by fprintd".into(), detail));
+        }
+    }
+    entries.sort_by(|a,b| a.0.cmp(&b.0));
+    if entries.is_empty() {
+        root.append(&info_row("No driver-bound devices discovered", "—", "LinuxFo could not read PCI, USB, network or Bluetooth sysfs entries."));
+    } else {
+        root.append(&label(&format!("{} device and interface entries", entries.len()), "muted"));
+        for (name, detail, driver) in entries {
+            root.append(&info_row(&name, &detail, &driver));
+        }
+    }
+    root.append(&label("Fingerprint support depends on the device being supported by libfprint/fprintd. A USB device may be listed above without being a supported fingerprint reader.", "muted"));
+    root.upcast()
+}
+
+fn journal_page() -> gtk::Widget {
+    let root = gtk::Box::new(Orientation::Vertical, 12);
+    root.append(&section_header("System Journal", "Recent systemd journal entries with severity and text filters"));
+
+    let controls = gtk::Box::new(Orientation::Horizontal, 8);
+    let severity = gtk::DropDown::from_strings(&["All", "Critical", "Error", "Warning", "Notice", "Info", "Debug"]);
+    severity.set_hexpand(false);
+    let search = gtk::SearchEntry::new();
+    search.set_placeholder_text(Some("Filter log text…"));
+    search.set_hexpand(true);
+    let refresh = gtk::Button::with_label("Load journal");
+    controls.append(&severity);
+    controls.append(&search);
+    controls.append(&refresh);
+    root.append(&controls);
+
+    let output = gtk::TextView::new();
+    output.set_editable(false);
+    output.set_cursor_visible(false);
+    output.set_monospace(true);
+    output.set_wrap_mode(gtk::WrapMode::None);
+    output.set_vexpand(true);
+    let buffer = output.buffer();
+    buffer.set_text("Select a severity and press “Load journal”. The journal is read with your current user permissions.");
+    let log_scroll = gtk::ScrolledWindow::new();
+    log_scroll.set_min_content_height(420);
+    log_scroll.set_vexpand(true);
+    log_scroll.set_hexpand(true);
+    log_scroll.set_child(Some(&output));
+    root.append(&log_scroll);
+
+    let severity_ref = severity.clone();
+    let search_ref = search.clone();
+    let buffer_ref = buffer.clone();
+    refresh.connect_clicked(move |_| {
+        let priority = match severity_ref.selected() {
+            1 => Some("crit"),
+            2 => Some("err"),
+            3 => Some("warning"),
+            4 => Some("notice"),
+            5 => Some("info"),
+            6 => Some("debug"),
+            _ => None,
+        };
+        let mut command = std::process::Command::new("journalctl");
+        command.args(["--no-pager", "-n", "500", "-o", "short-iso"]);
+        if let Some(priority) = priority {
+            command.args(["-p", priority]);
+        }
+        let text = match command.output() {
+            Ok(result) if result.status.success() => {
+                let all = String::from_utf8_lossy(&result.stdout);
+                let needle = search_ref.text().to_string().to_lowercase();
+                let filtered: Vec<&str> = all.lines().filter(|line| needle.is_empty() || line.to_lowercase().contains(&needle)).collect();
+                if filtered.is_empty() { "No journal entries matched the selected filters.".into() }
+                else { filtered.join("\n") }
+            }
+            Ok(result) => format!("journalctl failed:\n{}", String::from_utf8_lossy(&result.stderr)),
+            Err(error) => format!("Could not execute journalctl: {error}\nInstall systemd tools or check your PATH."),
+        };
+        buffer_ref.set_text(&text);
+    });
+    root.append(&label("Access note: add your user to the systemd-journal group for read access to the system journal, then sign out and back in. LinuxFo does not run journalctl as root.", "muted"));
+    root.upcast()
+}
+
 fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, process_filter: Rc<RefCell<String>>) -> gtk::Widget {
     let root = gtk::Box::new(Orientation::Vertical, 18);
     root.set_margin_top(28);
@@ -117,6 +255,8 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
         "Devices" => ("Hardware Devices", "USB and PCI device inventory"),
         "Network" => ("Network", "Interface traffic counters"),
         "Processes" => ("Processes", "Live process activity, CPU load and resident memory"),
+        "Drivers" => ("Drivers & Hardware", "Kernel driver bindings and device interfaces"),
+        "Journal" => ("System Journal", "Recent logs filtered by severity and text"),
         _ => ("System Overview", "A live view of your Linux machine"),
     };
 
@@ -405,6 +545,8 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
             root.append(&list);
             root.append(&label("Process actions run with your current user permissions. Protected processes may require administrator tools; LinuxFo does not elevate privileges.", "muted"));
         }
+        "Drivers" => return driver_inventory_page(),
+        "Journal" => return journal_page(),
         "Network" => {
             for network in &snapshot.networks {
                 root.append(&info_row(
@@ -622,7 +764,8 @@ fn main() {
 
         let stack = gtk::Stack::new();
         stack.set_hexpand(true);
-        stack.set_vexpand(true);
+        stack.set_vexpand(false);
+        stack.set_valign(Align::Start);
         stack.set_transition_type(gtk::StackTransitionType::Crossfade);
 
         let scroller = gtk::ScrolledWindow::new();
@@ -631,7 +774,7 @@ fn main() {
         scroller.set_child(Some(&stack));
 
         let pages = [
-            "Overview", "CPU", "Memory", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes",
+            "Overview", "CPU", "Memory", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes", "Drivers", "Journal",
         ];
 
         let buttons = gtk::Box::new(Orientation::Vertical, 5);
@@ -656,6 +799,8 @@ fn main() {
                 "Cameras" => "▣",
                 "Devices" => "◇",
                 "Processes" => "▥",
+                "Drivers" => "⚙",
+                "Journal" => "≡",
                 _ => "⌘",
             };
             let row = gtk::Box::new(Orientation::Horizontal, 10);
@@ -717,6 +862,7 @@ fn main() {
                 .visible_child_name()
                 .map(|name| name.to_string())
                 .unwrap_or_else(|| "Overview".into());
+            if page == "Journal" || page == "Drivers" { return glib::ControlFlow::Continue; }
             let widget = content_page(&snapshot_ref.borrow(), &page, monitor_ref.clone(), process_filter.clone());
             if let Some(old_child) = stack_ref.visible_child() {
                 stack_ref.remove(&old_child);
