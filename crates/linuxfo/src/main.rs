@@ -100,7 +100,7 @@ fn info_row(title: &str, value: &str, detail: &str) -> gtk::Box {
     widget
 }
 
-fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
+fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, process_filter: Rc<RefCell<String>>) -> gtk::Widget {
     let root = gtk::Box::new(Orientation::Vertical, 18);
     root.set_margin_top(28);
     root.set_margin_bottom(28);
@@ -263,28 +263,141 @@ fn content_page(snapshot: &Snapshot, page: &str) -> gtk::Widget {
             }
         }
         "Processes" => {
-            let summary = format!("{} processes • sorted by CPU usage • refreshes every 3 seconds", snapshot.processes.len());
-            root.append(&label(&summary, "muted"));
+            let search = gtk::SearchEntry::new();
+            search.set_hexpand(true);
+            search.set_placeholder_text(Some("Search by process name, PID or status…"));
+            search.set_text(&process_filter.borrow());
+            let filter_state = process_filter.clone();
+            search.connect_search_changed(move |entry| {
+                *filter_state.borrow_mut() = entry.text().to_string();
+            });
+            root.append(&search);
+
+            let needle = process_filter.borrow().to_lowercase();
+            let matching: Vec<_> = snapshot.processes.iter().filter(|process| {
+                needle.is_empty()
+                    || process.name.to_lowercase().contains(&needle)
+                    || process.pid.to_string().contains(&needle)
+                    || process.status.to_lowercase().contains(&needle)
+            }).collect();
+            root.append(&label(
+                &format!("{} matching processes • sorted by CPU usage • refreshes every 3 seconds", matching.len()),
+                "muted",
+            ));
             let list = gtk::ListBox::new();
             list.add_css_class("boxed-list");
-            for process in &snapshot.processes {
-                let row = gtk::Box::new(Orientation::Horizontal, 12);
-                row.set_margin_top(7);
-                row.set_margin_bottom(7);
+            for process in matching {
+                let row = gtk::Box::new(Orientation::Horizontal, 10);
+                row.set_margin_top(8);
+                row.set_margin_bottom(8);
                 row.set_margin_start(12);
                 row.set_margin_end(12);
+
                 let identity = gtk::Box::new(Orientation::Vertical, 3);
                 identity.set_hexpand(true);
                 identity.append(&label(&process.name, "metric-small"));
                 identity.append(&label(&format!("PID {} • {}", process.pid, process.status), "muted"));
                 row.append(&identity);
-                row.append(&label(&format!("{:.1}%", process.cpu_percent), "accent"));
+                row.append(&label(&format!("{:.1}% CPU", process.cpu_percent), "accent"));
                 row.append(&label(&format_bytes(process.memory_bytes), "muted"));
+
+                let kill_button = gtk::Button::with_label("Kill");
+                kill_button.add_css_class("destructive-action");
+                let action_monitor = monitor.clone();
+                let target_pid = process.pid;
+                kill_button.connect_clicked(move |button| {
+                    let Some(window) = button.root().and_downcast::<gtk::Window>() else { return; };
+                    let dialog = gtk::MessageDialog::builder()
+                        .transient_for(&window)
+                        .modal(true)
+                        .message_type(gtk::MessageType::Warning)
+                        .buttons(gtk::ButtonsType::YesNo)
+                        .text(format!("Kill {} (PID {})?", process.name, target_pid))
+                        .secondary_text("This sends SIGKILL. Unsaved work in this process may be lost.")
+                        .build();
+                    let action_monitor = action_monitor.clone();
+                    dialog.connect_response(move |dialog, response| {
+                        if response == gtk::ResponseType::Yes {
+                            if let Some((_, target)) = action_monitor.borrow().processes().iter()
+                                .find(|(pid, _)| pid.as_u32() == target_pid) {
+                                target.kill();
+                            }
+                        }
+                        dialog.close();
+                    });
+                    dialog.present();
+                });
+                row.append(&kill_button);
+
+                let restart_button = gtk::Button::with_label("Restart");
+                let action_monitor = monitor.clone();
+                let restart_pid = process.pid;
+                restart_button.set_sensitive(restart_pid > 1);
+                restart_button.connect_clicked(move |button| {
+                    let Some(window) = button.root().and_downcast::<gtk::Window>() else { return; };
+                    let restart_data = {
+                        let system = action_monitor.borrow();
+                        system.processes().iter()
+                            .find(|(pid, _)| pid.as_u32() == restart_pid)
+                            .and_then(|(_, process)| {
+                                Some((
+                                    process.exe()?.to_path_buf(),
+                                    process.cmd().iter().skip(1).cloned().collect::<Vec<_>>(),
+                                    process.cwd().map(|path| path.to_path_buf()),
+                                ))
+                            })
+                    };
+                    let Some((executable, args, cwd)) = restart_data else {
+                        let dialog = gtk::MessageDialog::builder()
+                            .transient_for(&window)
+                            .modal(true)
+                            .message_type(gtk::MessageType::Warning)
+                            .buttons(gtk::ButtonsType::Ok)
+                            .text("This process cannot be restarted")
+                            .secondary_text("LinuxFo could not read its executable path. Some kernel, protected or short-lived processes cannot be relaunched.")
+                            .build();
+                        dialog.connect_response(|dialog, _| dialog.close());
+                        dialog.present();
+                        return;
+                    };
+                    let dialog = gtk::MessageDialog::builder()
+                        .transient_for(&window)
+                        .modal(true)
+                        .message_type(gtk::MessageType::Warning)
+                        .buttons(gtk::ButtonsType::YesNo)
+                        .text(format!("Restart PID {}?", restart_pid))
+                        .secondary_text("LinuxFo will terminate this process and launch its executable again with the recorded arguments. This may not work correctly for systemd-managed services.")
+                        .build();
+                    let action_monitor = action_monitor.clone();
+                    dialog.connect_response(move |dialog, response| {
+                        if response == gtk::ResponseType::Yes {
+                            let killed = action_monitor.borrow().processes().iter()
+                                .find(|(pid, _)| pid.as_u32() == restart_pid)
+                                .map(|(_, process)| process.kill())
+                                .unwrap_or(false);
+                            if killed {
+                                glib::timeout_add_local_once(Duration::from_millis(700), move || {
+                                    let mut command = std::process::Command::new(executable);
+                                    command.args(args);
+                                    if let Some(directory) = cwd {
+                                        command.current_dir(directory);
+                                    }
+                                    let _ = command.spawn();
+                                });
+                            }
+                        }
+                        dialog.close();
+                    });
+                    dialog.present();
+                });
+                row.append(&restart_button);
+
                 let item = gtk::ListBoxRow::new();
                 item.set_child(Some(&row));
                 list.append(&item);
             }
             root.append(&list);
+            root.append(&label("Process actions run with your current user permissions. Protected processes may require administrator tools; LinuxFo does not elevate privileges.", "muted"));
         }
         "Network" => {
             for network in &snapshot.networks {
@@ -576,8 +689,9 @@ fn main() {
 
         let monitor = Rc::new(RefCell::new(System::new_all()));
         let snapshot = Rc::new(RefCell::new(collect_with_system(&mut monitor.borrow_mut())));
+        let process_filter = Rc::new(RefCell::new(String::new()));
         for page in pages {
-            let widget = content_page(&snapshot.borrow(), page);
+            let widget = content_page(&snapshot.borrow(), page, monitor.clone(), process_filter.clone());
             stack.add_named(&widget, Some(page));
         }
 
@@ -597,7 +711,7 @@ fn main() {
                 .visible_child_name()
                 .map(|name| name.to_string())
                 .unwrap_or_else(|| "Overview".into());
-            let widget = content_page(&snapshot_ref.borrow(), &page);
+            let widget = content_page(&snapshot_ref.borrow(), &page, monitor_ref.clone(), process_filter.clone());
             if let Some(old_child) = stack_ref.visible_child() {
                 stack_ref.remove(&old_child);
             }
