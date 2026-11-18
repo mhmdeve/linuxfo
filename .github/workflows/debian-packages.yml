@@ -37,7 +37,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then VERSION="0.1.0"; fi
+          if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then VERSION="0.2.0"; fi
           PKG="linuxfo_${VERSION}_${{ matrix.arch }}"
           ROOT="pkg/$PKG"
           mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/share/doc/linuxfo" "$ROOT/usr/share/icons/hicolor/scalable/apps"
