@@ -152,13 +152,8 @@ fn driver_inventory_page() -> gtk::Widget {
         }
     }
 
-    let fingerprint = std::process::Command::new("fprintd-list").arg(std::env::var("USER").unwrap_or_default()).output();
-    if let Ok(output) = fingerprint {
-        let detail = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if output.status.success() && !detail.is_empty() {
-            entries.push(("Fingerprint reader".into(), "Detected by fprintd".into(), detail));
-        }
-    }
+    // Fingerprint reader support is not inferred from USB presence alone:
+    // device compatibility must be checked against libfprint's supported-device database.
     entries.sort_by(|a,b| a.0.cmp(&b.0));
     if entries.is_empty() {
         root.append(&info_row("No driver-bound devices discovered", "—", "LinuxFo could not read PCI, USB, network or Bluetooth sysfs entries."));
