@@ -30,7 +30,7 @@ jobs:
             mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
             cat > /root/rpmbuild/SPECS/linuxfo.spec <<EOF
 Name: linuxfo
-Version: 0.1.0
+Version: 0.2.0
 Release: 1%{?dist}
 Summary: Linux system information and hardware monitor
 License: MIT
