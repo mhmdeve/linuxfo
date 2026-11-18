@@ -305,6 +305,7 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                 kill_button.add_css_class("destructive-action");
                 let action_monitor = monitor.clone();
                 let target_pid = process.pid;
+                let target_name = process.name.clone();
                 kill_button.connect_clicked(move |button| {
                     let Some(window) = button.root().and_downcast::<gtk::Window>() else { return; };
                     let dialog = gtk::MessageDialog::builder()
@@ -312,7 +313,7 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                         .modal(true)
                         .message_type(gtk::MessageType::Warning)
                         .buttons(gtk::ButtonsType::YesNo)
-                        .text(format!("Kill {} (PID {})?", process.name, target_pid))
+                        .text(format!("Kill {} (PID {})?", target_name, target_pid))
                         .secondary_text("This sends SIGKILL. Unsaved work in this process may be lost.")
                         .build();
                     let action_monitor = action_monitor.clone();
