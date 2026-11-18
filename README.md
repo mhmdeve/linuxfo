@@ -72,7 +72,7 @@ Linux exposes hardware information through kernel interfaces, firmware tables, d
 
 ## Live monitoring and camera permissions
 
-LinuxFo keeps a single system monitor alive while the window is open. CPU percentages and per-process CPU/RAM values are calculated from successive kernel samples and refresh every three seconds. The Processes page shows the busiest processes first.
+LinuxFo keeps a single system monitor alive while the window is open. CPU percentages and per-process CPU/RAM values are calculated from successive kernel samples and refresh every three seconds. The Processes page shows the busiest processes first and includes search by process name, PID, or status, plus confirmation-protected Kill and Restart actions. Process actions use the current user's permissions; restarting systemd-managed services may require service-specific handling.
 
 Camera discovery is intentionally passive: LinuxFo lists `/dev/video*` nodes and checks the current user's read permission without opening the camera or starting a stream. On many distributions, camera nodes are assigned to the `video` group. If the Cameras page reports missing permission, an administrator can add the current account to that group:
 
