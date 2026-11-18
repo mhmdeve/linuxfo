@@ -688,7 +688,7 @@ fn main() {
 
         sidebar.append(&buttons);
         sidebar.append(&gtk::Separator::new(Orientation::Horizontal));
-        sidebar.append(&label("LINUXFO  •  0.1.0", "muted"));
+        sidebar.append(&label("LINUXFO  •  0.2.0", "muted"));
 
         let main_area = gtk::Box::new(Orientation::Vertical, 0);
         main_area.set_hexpand(true);
