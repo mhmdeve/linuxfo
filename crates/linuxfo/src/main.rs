@@ -184,29 +184,38 @@ fn driver_inventory_page() -> gtk::Widget {
 }
 
 fn journal_page() -> gtk::Widget {
+    use std::collections::VecDeque;
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use std::sync::mpsc;
+
     let root = gtk::Box::new(Orientation::Vertical, 12);
-    root.append(&section_header("System Journal", "Recent systemd journal entries with severity and text filters"));
+    root.append(&section_header("System Journal", "Live systemd journal stream • newest entries load automatically"));
 
     let controls = gtk::Box::new(Orientation::Horizontal, 8);
     let severity = gtk::DropDown::from_strings(&["All", "Critical", "Error", "Warning", "Notice", "Info", "Debug"]);
-    severity.set_hexpand(false);
+    severity.set_tooltip_text(Some("Show this priority and more severe messages"));
     let search = gtk::SearchEntry::new();
-    search.set_placeholder_text(Some("Filter log text…"));
+    search.set_placeholder_text(Some("Filter message text…"));
     search.set_hexpand(true);
-    let refresh = gtk::Button::with_label("Load journal");
+    let pause = gtk::Button::with_label("Pause");
+    let clear = gtk::Button::with_label("Clear");
     controls.append(&severity);
     controls.append(&search);
-    controls.append(&refresh);
+    controls.append(&pause);
+    controls.append(&clear);
     root.append(&controls);
+
+    let status = label("Connecting to journalctl…", "muted");
+    root.append(&status);
 
     let output = gtk::TextView::new();
     output.set_editable(false);
     output.set_cursor_visible(false);
     output.set_monospace(true);
-    output.set_wrap_mode(gtk::WrapMode::None);
+    output.set_wrap_mode(gtk::WrapMode::WordChar);
     output.set_vexpand(true);
     let buffer = output.buffer();
-    buffer.set_text("Select a severity and press “Load journal”. The journal is read with your current user permissions.");
     let log_scroll = gtk::ScrolledWindow::new();
     log_scroll.set_min_content_height(420);
     log_scroll.set_vexpand(true);
@@ -214,38 +223,147 @@ fn journal_page() -> gtk::Widget {
     log_scroll.set_child(Some(&output));
     root.append(&log_scroll);
 
+    // journalctl runs off the GTK thread. JSON output preserves PRIORITY and MESSAGE
+    // so severity and text filters can be changed without restarting the stream.
+    let (sender, receiver) = mpsc::channel::<(u8, String)>();
+    std::thread::spawn(move || {
+        let mut child = match Command::new("journalctl")
+            .args(["--follow", "--lines=300", "--no-pager", "--output=json"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
+            Ok(child) => child,
+            Err(error) => {
+                let _ = sender.send((3, format!("LinuxFo: could not start journalctl: {error}")));
+                return;
+            }
+        };
+        if let Some(stdout) = child.stdout.take() {
+            for line in BufReader::new(stdout).lines() {
+                let Ok(line) = line else { break; };
+                let parsed: serde_json::Value = match serde_json::from_str(&line) {
+                    Ok(value) => value,
+                    Err(_) => continue,
+                };
+                let priority = parsed.get("PRIORITY")
+                    .and_then(|value| value.as_str().and_then(|v| v.parse::<u8>().ok())
+                        .or_else(|| value.as_u64().map(|v| v as u8)))
+                    .unwrap_or(6);
+                let message = parsed.get("MESSAGE")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("(journal entry without MESSAGE)");
+                let timestamp = parsed.get("__REALTIME_TIMESTAMP")
+                    .and_then(|value| value.as_str())
+                    .unwrap_or("");
+                let identifier = parsed.get("SYSLOG_IDENTIFIER")
+                    .and_then(|value| value.as_str())
+                    .or_else(|| parsed.get("_COMM").and_then(|value| value.as_str()))
+                    .unwrap_or("system");
+                let rendered = if timestamp.is_empty() {
+                    format!("[{identifier}] {message}")
+                } else {
+                    format!("[{timestamp}] [{identifier}] {message}")
+                };
+                if sender.send((priority, rendered)).is_err() { break; }
+            }
+        }
+        let _ = child.kill();
+        let _ = child.wait();
+    });
+
+    let entries = Rc::new(RefCell::new(VecDeque::<(u8, String)>::new()));
+    let paused = Rc::new(RefCell::new(false));
+    let pause_ref = paused.clone();
+    let pause_button = pause.clone();
+    pause.connect_clicked(move |_| {
+        let mut is_paused = pause_ref.borrow_mut();
+        *is_paused = !*is_paused;
+        pause_button.set_label(if *is_paused { "Resume" } else { "Pause" });
+    });
+
+    let entries_for_clear = entries.clone();
+    let buffer_for_clear = buffer.clone();
+    clear.connect_clicked(move |_| {
+        entries_for_clear.borrow_mut().clear();
+        buffer_for_clear.set_text("");
+    });
+
     let severity_ref = severity.clone();
     let search_ref = search.clone();
+    let entries_ref = entries.clone();
     let buffer_ref = buffer.clone();
-    refresh.connect_clicked(move |_| {
-        let priority = match severity_ref.selected() {
-            1 => Some("crit"),
-            2 => Some("err"),
-            3 => Some("warning"),
-            4 => Some("notice"),
-            5 => Some("info"),
-            6 => Some("debug"),
-            _ => None,
-        };
-        let mut command = std::process::Command::new("journalctl");
-        command.args(["--no-pager", "-n", "500", "-o", "short-iso"]);
-        if let Some(priority) = priority {
-            command.args(["-p", priority]);
-        }
-        let text = match command.output() {
-            Ok(result) if result.status.success() => {
-                let all = String::from_utf8_lossy(&result.stdout);
-                let needle = search_ref.text().to_string().to_lowercase();
-                let filtered: Vec<&str> = all.lines().filter(|line| needle.is_empty() || line.to_lowercase().contains(&needle)).collect();
-                if filtered.is_empty() { "No journal entries matched the selected filters.".into() }
-                else { filtered.join("\n") }
+    let status_ref = status.clone();
+    let scroll_ref = log_scroll.clone();
+    let paused_ref = paused.clone();
+    glib::timeout_add_local(Duration::from_millis(100), move || {
+        let mut received = false;
+        if !*paused_ref.borrow() {
+            while let Ok(entry) = receiver.try_recv() {
+                let mut stored = entries_ref.borrow_mut();
+                stored.push_back(entry);
+                while stored.len() > 1500 { stored.pop_front(); }
+                received = true;
             }
-            Ok(result) => format!("journalctl failed:\n{}", String::from_utf8_lossy(&result.stderr)),
-            Err(error) => format!("Could not execute journalctl: {error}\nInstall systemd tools or check your PATH."),
+        } else {
+            // Drain the pipe while paused so the background journalctl process
+            // cannot block; resume shows only messages received after resuming.
+            while receiver.try_recv().is_ok() {}
+        }
+
+        let priority_limit = match severity_ref.selected() {
+            1 => Some(2), 2 => Some(3), 3 => Some(4),
+            4 => Some(5), 5 => Some(6), 6 => Some(7), _ => None,
         };
-        buffer_ref.set_text(&text);
+        let needle = search_ref.text().to_string().to_lowercase();
+        let should_render = received;
+        if should_render {
+            let lines: Vec<String> = entries_ref.borrow().iter()
+                .filter(|(priority, _)| priority_limit.map(|limit| *priority <= limit).unwrap_or(true))
+                .filter(|(_, line)| needle.is_empty() || line.to_lowercase().contains(&needle))
+                .map(|(_, line)| line.clone())
+                .collect();
+            buffer_ref.set_text(&if lines.is_empty() {
+                "No journal entries match the current filters.".into()
+            } else { lines.join("\n") });
+            let adjustment = scroll_ref.vadjustment();
+            adjustment.set_value((adjustment.upper() - adjustment.page_size()).max(0.0));
+        }
+        let count = entries_ref.borrow().len();
+        status_ref.set_text(&format!(
+            "{} • {} buffered entries • {}",
+            if *paused_ref.borrow() { "Paused" } else { "Live" },
+            count,
+            if count == 0 { "Waiting for journal entries" } else { "journalctl --follow" }
+        ));
+        glib::ControlFlow::Continue
     });
-    root.append(&label("Access note: add your user to the systemd-journal group for read access to the system journal, then sign out and back in. LinuxFo does not run journalctl as root.", "muted"));
+
+    // Re-render immediately when either filter changes, even if no new log line arrives.
+    let entries_filter = entries.clone();
+    let buffer_filter = buffer.clone();
+    let severity_filter = severity.clone();
+    let search_filter = search.clone();
+    let redraw = Rc::new(move || {
+        let priority_limit = match severity_filter.selected() {
+            1 => Some(2), 2 => Some(3), 3 => Some(4),
+            4 => Some(5), 5 => Some(6), 6 => Some(7), _ => None,
+        };
+        let needle = search_filter.text().to_string().to_lowercase();
+        let lines: Vec<String> = entries_filter.borrow().iter()
+            .filter(|(priority, _)| priority_limit.map(|limit| *priority <= limit).unwrap_or(true))
+            .filter(|(_, line)| needle.is_empty() || line.to_lowercase().contains(&needle))
+            .map(|(_, line)| line.clone())
+            .collect();
+        buffer_filter.set_text(&if lines.is_empty() {
+            "No journal entries match the current filters.".into()
+        } else { lines.join("\n") });
+    });
+    let redraw_severity = redraw.clone();
+    severity.connect_selected_notify(move |_| redraw_severity());
+    search.connect_search_changed(move |_| redraw());
+
+    root.append(&label("Access: if system logs are unavailable, add your account to the systemd-journal group and sign in again. LinuxFo never runs the entire app as root.", "muted"));
     root.upcast()
 }
 
