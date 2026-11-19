@@ -367,6 +367,147 @@ fn journal_page() -> gtk::Widget {
     root.upcast()
 }
 
+fn performance_page(monitor: Rc<RefCell<System>>) -> gtk::Widget {
+    use std::collections::VecDeque;
+
+    let root = gtk::Box::new(Orientation::Vertical, 16);
+    root.set_margin_top(28);
+    root.set_margin_bottom(28);
+    root.set_margin_start(30);
+    root.set_margin_end(30);
+
+    let cpu_model = {
+        let system = monitor.borrow();
+        system.cpus().first().map(|cpu| cpu.brand().to_string())
+            .filter(|name| !name.is_empty()).unwrap_or_else(|| "Processor".into())
+    };
+    root.append(&section_header("Performance", &cpu_model));
+
+    let summary = gtk::Grid::new();
+    summary.set_column_spacing(12);
+    summary.set_row_spacing(12);
+    summary.set_column_homogeneous(true);
+
+    let cpu_count = monitor.borrow().cpus().len();
+    let histories: Vec<Rc<RefCell<VecDeque<f64>>>> = (0..cpu_count)
+        .map(|_| Rc::new(RefCell::new(VecDeque::from(vec![0.0; 60]))))
+        .collect();
+
+    for (index, history) in histories.iter().enumerate() {
+        let card = gtk::Box::new(Orientation::Vertical, 7);
+        card.add_css_class("card");
+        let heading = gtk::Box::new(Orientation::Horizontal, 6);
+        heading.set_hexpand(true);
+        heading.append(&label(&format!("CPU {index}"), "metric-small"));
+        let value = label("0%", "accent");
+        heading.append(&value);
+        card.append(&heading);
+
+        let chart = gtk::DrawingArea::new();
+        chart.set_content_width(150);
+        chart.set_content_height(76);
+        chart.set_hexpand(true);
+        let history_draw = history.clone();
+        chart.set_draw_func(move |_, context, width, height| {
+            let width = width as f64;
+            let height = height as f64;
+            context.set_source_rgba(0.22, 0.52, 0.88, 0.10);
+            let _ = context.paint();
+            let values = history_draw.borrow();
+            if values.len() < 2 { return; }
+            let step = width / (values.len() - 1) as f64;
+            context.move_to(0.0, height);
+            for (i, sample) in values.iter().enumerate() {
+                let x = i as f64 * step;
+                let y = height - (sample.clamp(0.0, 100.0) / 100.0 * (height - 4.0)) - 2.0;
+                context.line_to(x, y);
+            }
+            context.line_to(width, height);
+            context.close_path();
+            context.set_source_rgba(0.20, 0.48, 0.84, 0.30);
+            let _ = context.fill_preserve();
+            context.set_source_rgb(0.30, 0.62, 0.96);
+            context.set_line_width(1.5);
+            let _ = context.stroke();
+        });
+        card.append(&chart);
+        summary.attach(&card, (index % 4) as i32, (index / 4) as i32, 1, 1);
+
+        let value_ref = value.clone();
+        let history_ref = history.clone();
+        let monitor_ref = monitor.clone();
+        glib::timeout_add_local(Duration::from_secs(1), move || {
+            let usage = monitor_ref.borrow().cpus().get(index)
+                .map(|cpu| cpu.cpu_usage() as f64).unwrap_or(0.0);
+            {
+                let mut samples = history_ref.borrow_mut();
+                samples.push_back(usage);
+                while samples.len() > 60 { samples.pop_front(); }
+            }
+            value_ref.set_text(&format!("{usage:.0}%"));
+            chart.queue_draw();
+            glib::ControlFlow::Continue
+        });
+    }
+    root.append(&summary);
+
+    let memory_card = gtk::Box::new(Orientation::Vertical, 10);
+    memory_card.add_css_class("card");
+    memory_card.append(&label("MEMORY", "card-title"));
+    let memory_value = label("Reading memory…", "metric");
+    memory_card.append(&memory_value);
+    let memory_detail = label("", "muted");
+    memory_card.append(&memory_detail);
+    let memory_bar = gtk::ProgressBar::new();
+    memory_card.append(&memory_bar);
+
+    let swap_card = gtk::Box::new(Orientation::Vertical, 10);
+    swap_card.add_css_class("card");
+    swap_card.append(&label("SWAP", "card-title"));
+    let swap_value = label("Reading swap…", "metric");
+    swap_card.append(&swap_value);
+    let swap_detail = label("", "muted");
+    swap_card.append(&swap_detail);
+    let swap_bar = gtk::ProgressBar::new();
+    swap_card.append(&swap_bar);
+
+    let lower = gtk::Grid::new();
+    lower.set_column_spacing(12);
+    lower.set_column_homogeneous(true);
+    lower.attach(&memory_card, 0, 0, 1, 1);
+    lower.attach(&swap_card, 1, 0, 1, 1);
+    root.append(&lower);
+
+    let memory_value_ref = memory_value.clone();
+    let memory_detail_ref = memory_detail.clone();
+    let memory_bar_ref = memory_bar.clone();
+    let swap_value_ref = swap_value.clone();
+    let swap_detail_ref = swap_detail.clone();
+    let swap_bar_ref = swap_bar.clone();
+    let monitor_stats = monitor.clone();
+    glib::timeout_add_local(Duration::from_secs(1), move || {
+        let system = monitor_stats.borrow();
+        let total = system.total_memory();
+        let used = system.used_memory();
+        let swap_total = system.total_swap();
+        let swap_used = system.used_swap();
+        let memory_percent = if total == 0 { 0.0 } else { used as f64 * 100.0 / total as f64 };
+        let swap_percent = if swap_total == 0 { 0.0 } else { swap_used as f64 * 100.0 / swap_total as f64 };
+        memory_value_ref.set_text(&format!("{:.1}%", memory_percent));
+        memory_detail_ref.set_text(&format!("{} used • {} total • {} available",
+            format_bytes(used), format_bytes(total), format_bytes(total.saturating_sub(used))));
+        memory_bar_ref.set_fraction((memory_percent / 100.0).clamp(0.0, 1.0));
+        swap_value_ref.set_text(&format!("{:.1}%", swap_percent));
+        swap_detail_ref.set_text(&format!("{} used • {} total",
+            format_bytes(swap_used), format_bytes(swap_total)));
+        swap_bar_ref.set_fraction((swap_percent / 100.0).clamp(0.0, 1.0));
+        glib::ControlFlow::Continue
+    });
+
+    root.append(&label("Per-logical-CPU utilisation history • 60-second rolling window • updates every second", "muted"));
+    root.upcast()
+}
+
 fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, process_filter: Rc<RefCell<String>>) -> gtk::Widget {
     let root = gtk::Box::new(Orientation::Vertical, 18);
     root.set_margin_top(28);
@@ -376,7 +517,7 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
 
     let (title, subtitle) = match page {
         "CPU" => ("Processor", "Architecture, topology and utilisation"),
-        "Memory" => ("Memory", "Physical memory and swap usage"),
+        "Performance" => ("Performance", "Per-core CPU, memory and swap utilisation"),
         "Storage" => ("Storage", "Filesystems, devices and mount points"),
         "Disk Health" => ("Disk Health", "SMART and NVMe drive condition, temperature and endurance"),
         "Thermals" => ("Thermals & Sensors", "Kernel-exposed temperature and telemetry channels"),
@@ -392,6 +533,7 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
     root.append(&section_header(title, subtitle));
 
     match page {
+        "Performance" => return performance_page(monitor.clone()),
         "CPU" => {
             root.append(&info_row(
                 "Processor",
@@ -898,7 +1040,7 @@ fn main() {
         stack.set_transition_type(gtk::StackTransitionType::Crossfade);
 
         let pages = [
-            "Overview", "CPU", "Memory", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes", "Drivers", "Journal",
+            "Overview", "CPU", "Performance", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes", "Drivers", "Journal",
         ];
 
         let buttons = gtk::Box::new(Orientation::Vertical, 5);
@@ -916,7 +1058,7 @@ fn main() {
             let button = gtk::ToggleButton::new();
             let symbol = match *page {
                 "CPU" => "◉",
-                "Memory" => "▤",
+                "Performance" => "▤",
                 "Storage" => "▣",
                 "Disk Health" => "♥",
                 "Thermals" => "⌁",
@@ -985,7 +1127,7 @@ fn main() {
                 .visible_child_name()
                 .map(|name| name.to_string())
                 .unwrap_or_else(|| "Overview".into());
-            if page == "Journal" || page == "Drivers" { return glib::ControlFlow::Continue; }
+            if page == "Journal" || page == "Drivers" || page == "Performance" { return glib::ControlFlow::Continue; }
             let widget = content_page(&snapshot_ref.borrow(), &page, monitor_ref.clone(), process_filter.clone());
             let page_scroller = page_scroller(&widget);
             if let Some(old_child) = stack_ref.visible_child() {
