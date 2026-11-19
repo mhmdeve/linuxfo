@@ -40,12 +40,14 @@ jobs:
           if [[ "$VERSION" == "$GITHUB_REF_NAME" ]]; then VERSION="0.2.0"; fi
           PKG="linuxfo_${VERSION}_${{ matrix.arch }}"
           ROOT="pkg/$PKG"
-          mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/share/applications" "$ROOT/usr/share/doc/linuxfo" "$ROOT/usr/share/icons/hicolor/scalable/apps"
+          mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/lib/systemd/system" "$ROOT/usr/share/applications" "$ROOT/usr/share/doc/linuxfo" "$ROOT/usr/share/icons/hicolor/scalable/apps"
           for size in 48 64 128 256 512; do
             mkdir -p "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps"
             rsvg-convert -w "$size" -h "$size" packaging/io.linuxfo.SystemInfo.svg > "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps/io.linuxfo.SystemInfo.png"
           done
           install -m 0755 target/release/linuxfo "$ROOT/usr/bin/linuxfo"
+          install -m 0755 target/release/linuxfo-daemon "$ROOT/usr/bin/linuxfo-daemon"
+          install -m 0644 packaging/linuxfo-daemon.service "$ROOT/usr/lib/systemd/system/linuxfo-daemon.service"
           install -m 0644 packaging/io.linuxfo.SystemInfo.desktop "$ROOT/usr/share/applications/io.linuxfo.SystemInfo.desktop"
           install -m 0644 packaging/io.linuxfo.SystemInfo.svg "$ROOT/usr/share/icons/hicolor/scalable/apps/io.linuxfo.SystemInfo.svg"
           install -m 0644 README.md LICENSE "$ROOT/usr/share/doc/linuxfo/"
@@ -62,6 +64,32 @@ jobs:
            A GTK4 desktop application for inspecting Linux hardware, sensors,
            memory, storage, cameras, network interfaces and connected devices.
           EOF
+          cat > "$ROOT/DEBIAN/postinst" <<'EOF'
+          #!/bin/sh
+          set -e
+          if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+            systemctl enable --now linuxfo-daemon.service || true
+          fi
+          exit 0
+          EOF
+          cat > "$ROOT/DEBIAN/prerm" <<'EOF'
+          #!/bin/sh
+          set -e
+          if command -v systemctl >/dev/null 2>&1; then
+            systemctl disable --now linuxfo-daemon.service || true
+          fi
+          exit 0
+          EOF
+          cat > "$ROOT/DEBIAN/postrm" <<'EOF'
+          #!/bin/sh
+          set -e
+          if command -v systemctl >/dev/null 2>&1; then
+            systemctl daemon-reload || true
+          fi
+          exit 0
+          EOF
+          chmod 0755 "$ROOT/DEBIAN/postinst" "$ROOT/DEBIAN/prerm" "$ROOT/DEBIAN/postrm"
           dpkg-deb --root-owner-group --build "$ROOT"
           mv "$ROOT.deb" "linuxfo_${VERSION}_${{ matrix.arch }}.deb"
           dpkg-deb --info "linuxfo_${VERSION}_${{ matrix.arch }}.deb"
