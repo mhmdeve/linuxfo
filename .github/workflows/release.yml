@@ -70,12 +70,18 @@ jobs:
       - name: Bundle release archive
         shell: bash
         run: |
-          mkdir -p "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}"
-          install -m 0755 target/release/linuxfo "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}/linuxfo"
-          install -m 0644 README.md LICENSE "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}/"
-          install -m 0644 packaging/io.linuxfo.SystemInfo.desktop "bundle/linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}/"
-          tar -C bundle -czf "linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}.tar.gz" "linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}"
-          sha256sum "linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}.tar.gz" > "linuxfo-${GITHUB_REF_NAME}-${{ matrix.arch }}.tar.gz.sha256"
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
+          fi
+          ARCHIVE="linuxfo-v${VERSION}-${{ matrix.arch }}"
+          mkdir -p "bundle/$ARCHIVE"
+          install -m 0755 target/release/linuxfo "bundle/$ARCHIVE/linuxfo"
+          install -m 0644 README.md LICENSE "bundle/$ARCHIVE/"
+          install -m 0644 packaging/io.linuxfo.SystemInfo.desktop "bundle/$ARCHIVE/"
+          tar -C bundle -czf "$ARCHIVE.tar.gz" "$ARCHIVE"
+          sha256sum "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.arch }}
@@ -103,8 +109,14 @@ jobs:
         shell: bash
         run: |
           if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
-            RELEASE_VERSION="${GITHUB_REF_NAME}"
+            RELEASE_TAG="${GITHUB_REF_NAME}"
           else
-            RELEASE_VERSION="v$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
+            RELEASE_TAG="v$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
           fi
-          gh release create "${GITHUB_REF_NAME}" release-assets/* --title "LinuxFo ${RELEASE_VERSION}" --generate-notes
+          RELEASE_VERSION="${RELEASE_TAG#v}"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* --clobber
+            gh release edit "$RELEASE_TAG" --title "LinuxFo v${RELEASE_VERSION}"
+          else
+            gh release create "$RELEASE_TAG" release-assets/* --title "LinuxFo v${RELEASE_VERSION}" --generate-notes
+          fi
