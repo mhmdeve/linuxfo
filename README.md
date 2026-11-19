@@ -82,6 +82,22 @@ sudo usermod -aG video "$USER"
 
 Sign out and sign back in for the group change to take effect. Some distributions use a different device group or access policy; follow the permissions shown for the actual device. Native Debian packages do not use Flatpak's camera permission portal.
 
+## Privileged hardware diagnostics daemon
+
+Native Debian/RPM packages install and enable `linuxfo-daemon.service` automatically. The daemon starts at boot as root and exposes a deliberately narrow local Unix-socket API for read-only SMART/NVMe health collection. The desktop GUI remains an unprivileged user process and does not ask for an administrator password on each launch.
+
+For a manually installed binary, install both `linuxfo` and `linuxfo-daemon`, then install and enable the service:
+
+```bash
+sudo install -Dm755 target/release/linuxfo-daemon /usr/bin/linuxfo-daemon
+sudo install -Dm644 packaging/linuxfo-daemon.service /usr/lib/systemd/system/linuxfo-daemon.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now linuxfo-daemon.service
+systemctl status linuxfo-daemon.service
+```
+
+The daemon accepts only the fixed `disk-health` request and does not provide a root shell, arbitrary command execution, or arbitrary device access. Its socket is local-only and world-connectable because the exposed operation is read-only. Do not add privileged write operations to this socket; use a separately authorized Polkit action for any future administrative changes.
+
 ## License
 
 LinuxFo is open source software licensed under the [MIT License](LICENSE).
