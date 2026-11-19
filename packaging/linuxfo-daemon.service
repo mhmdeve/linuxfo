@@ -1,0 +1,32 @@
+[Unit]
+Description=LinuxFo privileged hardware diagnostics daemon
+Documentation=https://github.com/mhmdeve/linuxfo
+After=local-fs.target
+Wants=local-fs.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/bin/linuxfo-daemon
+Restart=on-failure
+RestartSec=2
+RuntimeDirectory=linuxfo
+RuntimeDirectoryMode=0755
+UMask=0000
+
+# Keep the privileged service limited to local IPC and read-only diagnostics.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target
