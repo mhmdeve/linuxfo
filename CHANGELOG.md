@@ -16,6 +16,25 @@ This project follows a simplified version of [Keep a Changelog](https://keepacha
 - Process actions run with the current user's permissions and do not automatically elevate privileges.
 - Restarting systemd-managed services or processes requiring special launch environments may not work reliably.
 
+## [0.2.0] - 2026-11-19
+
+### Added
+- Added searchable process management with process-name, PID, and status filters.
+- Added confirmed process termination and restart actions.
+- Added dedicated Drivers and Journal pages for hardware-driver information and system logs.
+- Added live journal streaming with pause/resume and severity and text filters.
+- Added a live Performance dashboard with per-core CPU graphs and network traffic rates.
+- Added a persistent, restricted root daemon for SMART/NVMe disk diagnostics, replacing the GUI-launched privileged helper.
+- Added systemd service integration and daemon packaging for Debian, RPM, and Arch builds.
+
+### Fixed
+- Fixed device detection to avoid incorrectly identifying fingerprint readers as generic devices.
+- Fixed page scrolling, excess blank space, and scroll-position resets during refresh.
+- Moved CPU monitoring into Performance and integrated Drive Health at the top of Storage.
+- Improved SMART diagnostics to use the persistent daemon instead of repeatedly requesting authentication.
+- Fixed process-action callback handling and restart confirmation behavior.
+- Fixed package metadata and version consistency across workspace crates and distribution packages.
+
 ## [0.1.0] - 2026-11-17
 
 ### Added
