@@ -412,7 +412,7 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
             else if name.starts_with("vd") || name.starts_with("xvd") { "Virtual disk" }
             else { "Block device" }.to_string();
 
-        // This scan runs as the normal user or inside the single pkexec helper.
+        // This scan runs inside the root daemon or as an unprivileged fallback.
         let output = std::process::Command::new("smartctl").args(["-a", "-j", &device]).output();
 
         let mut status = "SMART unavailable".to_string();
@@ -473,7 +473,7 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
                         || diagnostics.contains("authentication")
                         || diagnostics.contains("cancelled")
                     {
-                        "Administrator authorization was cancelled or denied. Select Refresh and approve the system authentication prompt to read SMART data.".into()
+                        "The LinuxFo root daemon is unavailable or denied access. Check that linuxfo-daemon.service is active.".into()
                     } else {
                         "smartctl could not read this device. Check controller support and device permissions.".into()
                     };
@@ -489,7 +489,7 @@ fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
                     || diagnostics.contains("cancelled")
                     || diagnostics.contains("not permitted")
                 {
-                    "Administrator authorization was cancelled or denied. Approve the system authentication prompt and refresh Disk Health to retry.".into()
+                    "The LinuxFo root daemon is unavailable or denied access. Check that linuxfo-daemon.service is active.".into()
                 } else {
                     "smartctl returned data that could not be parsed.".into()
                 };
