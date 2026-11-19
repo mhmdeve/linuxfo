@@ -39,10 +39,20 @@ BuildArch: %{_arch}
 %description
 LinuxFo hardware and system information desktop application.
 %install
-mkdir -p %{buildroot}/usr/bin
+mkdir -p %{buildroot}/usr/bin %{buildroot}/usr/lib/systemd/system
 install -m 0755 /src/target/release/linuxfo %{buildroot}/usr/bin/linuxfo
+install -m 0755 /src/target/release/linuxfo-daemon %{buildroot}/usr/bin/linuxfo-daemon
+install -m 0644 /src/packaging/linuxfo-daemon.service %{buildroot}/usr/lib/systemd/system/linuxfo-daemon.service
+%post
+if command -v systemctl >/dev/null 2>&1; then systemctl daemon-reload || :; systemctl enable --now linuxfo-daemon.service || :; fi
+%preun
+if [ "$1" -eq 0 ] && command -v systemctl >/dev/null 2>&1; then systemctl disable --now linuxfo-daemon.service || :; fi
+%postun
+if command -v systemctl >/dev/null 2>&1; then systemctl daemon-reload || :; fi
 %files
 /usr/bin/linuxfo
+/usr/bin/linuxfo-daemon
+/usr/lib/systemd/system/linuxfo-daemon.service
 EOF
             rpmbuild -bb /root/rpmbuild/SPECS/linuxfo.spec
             mkdir -p /src/rpm-out
