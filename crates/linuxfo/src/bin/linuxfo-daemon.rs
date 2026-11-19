@@ -71,7 +71,7 @@ fn main() -> std::io::Result<()> {
     for connection in listener.incoming() {
         match connection {
             Ok(stream) => {
-                thread::spawn(|| handle_client(stream));
+                thread::spawn(move || handle_client(stream));
             }
             Err(error) => eprintln!("linuxfo-daemon: socket accept failed: {error}"),
         }
