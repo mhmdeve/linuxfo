@@ -1,5 +1,5 @@
 pkgname=linuxfo
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc='Linux system information and hardware monitor'
 arch=('x86_64' 'aarch64')
@@ -18,6 +18,8 @@ build() {
 package() {
   cd "$srcdir/linuxfo-$pkgver"
   install -Dm755 target/release/linuxfo "$pkgdir/usr/bin/linuxfo"
+  install -Dm755 target/release/linuxfo-daemon "$pkgdir/usr/bin/linuxfo-daemon"
+  install -Dm644 packaging/linuxfo-daemon.service "$pkgdir/usr/lib/systemd/system/linuxfo-daemon.service"
   install -Dm644 packaging/linuxfo.desktop "$pkgdir/usr/share/applications/linuxfo.desktop"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/linuxfo/LICENSE"
 }
