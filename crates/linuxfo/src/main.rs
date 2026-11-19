@@ -704,7 +704,6 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                     root.append(&card);
                 }
             }
-        }
 
             if snapshot.disks.is_empty() {
                 root.append(&info_row("No mounted filesystems found", "—", "No mounted storage volumes were discovered."));
@@ -725,6 +724,7 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                 card.append(&label(&format!("USED SPACE • {percent:.1}%"), "muted"));
                 root.append(&card);
             }
+        }
 
         "Thermals" => {
             if snapshot.sensors.is_empty() {
