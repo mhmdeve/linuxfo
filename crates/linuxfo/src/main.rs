@@ -655,27 +655,6 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                 "Kernel swap accounting",
             ));
         }
-        "Storage" => {
-            if snapshot.disks.is_empty() {
-                root.append(&info_row("No mounted filesystems found", "—", "No mounted storage volumes were discovered."));
-            }
-            for disk in &snapshot.disks {
-                let used = disk.total_bytes.saturating_sub(disk.available_bytes);
-                let percent = if disk.total_bytes == 0 { 0.0 } else { used as f64 * 100.0 / disk.total_bytes as f64 };
-                let card = gtk::Box::new(Orientation::Vertical, 8);
-                card.add_css_class("card");
-                card.append(&info_row(&disk.name, &format_bytes(disk.total_bytes), &format!(
-                    "{} • {} • {} used • {} free{}",
-                    disk.mount_point, disk.filesystem, format_bytes(used),
-                    format_bytes(disk.available_bytes), if disk.removable { " • removable" } else { "" }
-                )));
-                let bar = gtk::ProgressBar::new();
-                bar.set_fraction((percent / 100.0).clamp(0.0, 1.0));
-                card.append(&bar);
-                card.append(&label(&format!("USED SPACE • {percent:.1}%"), "muted"));
-                root.append(&card);
-            }
-
             root.append(&section_header("Drive Health (SMART / NVMe)", "Drive condition, temperature, endurance and activity"));
             if snapshot.disk_health.is_empty() {
                 root.append(&info_row("No physical drives found", "—", "No supported block devices were discovered under /sys/block."));
@@ -725,6 +704,28 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                 }
             }
         }
+
+        "Storage" => {
+            if snapshot.disks.is_empty() {
+                root.append(&info_row("No mounted filesystems found", "—", "No mounted storage volumes were discovered."));
+            }
+            for disk in &snapshot.disks {
+                let used = disk.total_bytes.saturating_sub(disk.available_bytes);
+                let percent = if disk.total_bytes == 0 { 0.0 } else { used as f64 * 100.0 / disk.total_bytes as f64 };
+                let card = gtk::Box::new(Orientation::Vertical, 8);
+                card.add_css_class("card");
+                card.append(&info_row(&disk.name, &format_bytes(disk.total_bytes), &format!(
+                    "{} • {} • {} used • {} free{}",
+                    disk.mount_point, disk.filesystem, format_bytes(used),
+                    format_bytes(disk.available_bytes), if disk.removable { " • removable" } else { "" }
+                )));
+                let bar = gtk::ProgressBar::new();
+                bar.set_fraction((percent / 100.0).clamp(0.0, 1.0));
+                card.append(&bar);
+                card.append(&label(&format!("USED SPACE • {percent:.1}%"), "muted"));
+                root.append(&card);
+            }
+
         "Thermals" => {
             if snapshot.sensors.is_empty() {
                 root.append(&info_row(
@@ -1213,6 +1214,10 @@ fn main() {
                 .map(|name| name.to_string())
                 .unwrap_or_else(|| "Overview".into());
             if page == "Journal" || page == "Drivers" || page == "Performance" { return glib::ControlFlow::Continue; }
+            let previous_scroll = stack_ref.visible_child()
+                .and_then(|child| child.downcast::<gtk::ScrolledWindow>().ok())
+                .map(|scroller| scroller.vadjustment().value())
+                .unwrap_or(0.0);
             let widget = content_page(&snapshot_ref.borrow(), &page, monitor_ref.clone(), process_filter.clone());
             let page_scroller = page_scroller(&widget);
             if let Some(old_child) = stack_ref.visible_child() {
@@ -1220,6 +1225,17 @@ fn main() {
             }
             stack_ref.add_named(&page_scroller, Some(&page));
             stack_ref.set_visible_child_name(&page);
+            let stack_restore = stack_ref.clone();
+            let page_restore = page.clone();
+            glib::idle_add_local_once(move || {
+                if let Some(scroller) = stack_restore.child_by_name(&page_restore)
+                    .and_then(|child| child.downcast::<gtk::ScrolledWindow>().ok())
+                {
+                    let adjustment = scroller.vadjustment();
+                    let max_value = (adjustment.upper() - adjustment.page_size()).max(0.0);
+                    adjustment.set_value(previous_scroll.min(max_value));
+                }
+            });
             glib::ControlFlow::Continue
         });
     });
