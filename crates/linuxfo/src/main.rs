@@ -451,6 +451,91 @@ fn performance_page(monitor: Rc<RefCell<System>>) -> gtk::Widget {
     }
     root.append(&summary);
 
+    // Aggregate interface throughput, sampled directly from kernel sysfs counters.
+    let network_card = gtk::Box::new(Orientation::Vertical, 10);
+    network_card.add_css_class("card");
+    network_card.append(&label("NETWORK TRAFFIC", "card-title"));
+    let network_values = gtk::Grid::new();
+    network_values.set_column_spacing(28);
+    let download_value = label("↓ 0 B/s", "metric");
+    let upload_value = label("↑ 0 B/s", "metric");
+    let download_box = gtk::Box::new(Orientation::Vertical, 3);
+    download_box.append(&label("DOWNLOAD", "card-title"));
+    download_box.append(&download_value);
+    let upload_box = gtk::Box::new(Orientation::Vertical, 3);
+    upload_box.append(&label("UPLOAD", "card-title"));
+    upload_box.append(&upload_value);
+    network_values.attach(&download_box, 0, 0, 1, 1);
+    network_values.attach(&upload_box, 1, 0, 1, 1);
+    network_card.append(&network_values);
+    let network_history = Rc::new(RefCell::new(VecDeque::<(f64, f64)>::from(vec![(0.0, 0.0); 60])));
+    let network_chart = gtk::DrawingArea::new();
+    network_chart.set_content_width(500);
+    network_chart.set_content_height(90);
+    network_chart.set_hexpand(true);
+    let draw_history = network_history.clone();
+    network_chart.set_draw_func(move |_, context, width, height| {
+        let samples = draw_history.borrow();
+        if samples.len() < 2 { return; }
+        let width = width as f64;
+        let height = height as f64;
+        let max_rate = samples.iter().flat_map(|(rx, tx)| [*rx, *tx]).fold(1.0_f64, f64::max);
+        let step = width / (samples.len() - 1) as f64;
+        for (series, receive) in [(0_u8, true), (1_u8, false)] {
+            context.new_path();
+            for (i, (rx, tx)) in samples.iter().enumerate() {
+                let rate = if receive { *rx } else { *tx };
+                let x = i as f64 * step;
+                let y = height - (rate / max_rate * (height - 8.0)) - 4.0;
+                if i == 0 { context.move_to(x, y); } else { context.line_to(x, y); }
+            }
+            if series == 0 { context.set_source_rgb(0.30, 0.62, 0.96); }
+            else { context.set_source_rgb(0.90, 0.50, 0.32); }
+            context.set_line_width(2.0);
+            let _ = context.stroke();
+        }
+    });
+    network_card.append(&network_chart);
+    network_card.append(&label("Combined interface throughput • 60-second history • excludes loopback", "muted"));
+    root.append(&network_card);
+
+    let previous = Rc::new(RefCell::new(None::<(u64, u64)>));
+    let previous_ref = previous.clone();
+    let history_ref = network_history.clone();
+    let download_ref = download_value.clone();
+    let upload_ref = upload_value.clone();
+    let chart_ref = network_chart.clone();
+    glib::timeout_add_local(Duration::from_secs(1), move || {
+        let mut rx = 0_u64;
+        let mut tx = 0_u64;
+        if let Ok(interfaces) = std::fs::read_dir("/sys/class/net") {
+            for interface in interfaces.flatten() {
+                if interface.file_name() == "lo" { continue; }
+                let stats = interface.path().join("statistics");
+                rx = rx.saturating_add(sysfs_value(&stats.join("rx_bytes")).parse().unwrap_or(0));
+                tx = tx.saturating_add(sysfs_value(&stats.join("tx_bytes")).parse().unwrap_or(0));
+            }
+        }
+        let (rx_rate, tx_rate) = {
+            let mut previous = previous_ref.borrow_mut();
+            let rates = previous.map(|(old_rx, old_tx)| (
+                rx.saturating_sub(old_rx) as f64,
+                tx.saturating_sub(old_tx) as f64,
+            )).unwrap_or((0.0, 0.0));
+            *previous = Some((rx, tx));
+            rates
+        };
+        {
+            let mut samples = history_ref.borrow_mut();
+            samples.push_back((rx_rate, tx_rate));
+            while samples.len() > 60 { samples.pop_front(); }
+        }
+        download_ref.set_text(&format!("↓ {}/s", format_bytes(rx_rate as u64)));
+        upload_ref.set_text(&format!("↑ {}/s", format_bytes(tx_rate as u64)));
+        chart_ref.queue_draw();
+        glib::ControlFlow::Continue
+    });
+
     let memory_card = gtk::Box::new(Orientation::Vertical, 10);
     memory_card.add_css_class("card");
     memory_card.append(&label("MEMORY", "card-title"));
@@ -516,10 +601,8 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
     root.set_margin_end(30);
 
     let (title, subtitle) = match page {
-        "CPU" => ("Processor", "Architecture, topology and utilisation"),
         "Performance" => ("Performance", "Per-core CPU, memory and swap utilisation"),
         "Storage" => ("Storage", "Filesystems, devices and mount points"),
-        "Disk Health" => ("Disk Health", "SMART and NVMe drive condition, temperature and endurance"),
         "Thermals" => ("Thermals & Sensors", "Kernel-exposed temperature and telemetry channels"),
         "Cameras" => ("Cameras", "Video devices discovered without activating streams"),
         "Devices" => ("Hardware Devices", "USB and PCI device inventory"),
@@ -573,23 +656,27 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
             ));
         }
         "Storage" => {
+            if snapshot.disks.is_empty() {
+                root.append(&info_row("No mounted filesystems found", "—", "No mounted storage volumes were discovered."));
+            }
             for disk in &snapshot.disks {
                 let used = disk.total_bytes.saturating_sub(disk.available_bytes);
-                root.append(&info_row(
-                    &disk.name,
-                    &format_bytes(disk.total_bytes),
-                    &format!(
-                        "{} • {} • {} used • {} free{}",
-                        disk.mount_point,
-                        disk.filesystem,
-                        format_bytes(used),
-                        format_bytes(disk.available_bytes),
-                        if disk.removable { " • removable" } else { "" }
-                    ),
-                ));
+                let percent = if disk.total_bytes == 0 { 0.0 } else { used as f64 * 100.0 / disk.total_bytes as f64 };
+                let card = gtk::Box::new(Orientation::Vertical, 8);
+                card.add_css_class("card");
+                card.append(&info_row(&disk.name, &format_bytes(disk.total_bytes), &format!(
+                    "{} • {} • {} used • {} free{}",
+                    disk.mount_point, disk.filesystem, format_bytes(used),
+                    format_bytes(disk.available_bytes), if disk.removable { " • removable" } else { "" }
+                )));
+                let bar = gtk::ProgressBar::new();
+                bar.set_fraction((percent / 100.0).clamp(0.0, 1.0));
+                card.append(&bar);
+                card.append(&label(&format!("USED SPACE • {percent:.1}%"), "muted"));
+                root.append(&card);
             }
-        }
-        "Disk Health" => {
+
+            root.append(&section_header("Drive Health (SMART / NVMe)", "Drive condition, temperature, endurance and activity"));
             if snapshot.disk_health.is_empty() {
                 root.append(&info_row("No physical drives found", "—", "No supported block devices were discovered under /sys/block."));
             } else {
@@ -613,11 +700,11 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                     metrics_grid.set_column_spacing(18);
                     metrics_grid.set_row_spacing(8);
                     let health_text = disk.health_percent.map(|v| format!("{:.0}%", v.clamp(0.0, 100.0))).unwrap_or_else(|| "Unavailable".into());
-                    let performance_text = disk.performance_percent.map(|v| format!("{:.0}%", v.clamp(0.0, 100.0))).unwrap_or_else(|| "Sampling…".into());
+                    let busy_text = disk.performance_percent.map(|v| format!("{:.0}%", v.clamp(0.0, 100.0))).unwrap_or_else(|| "Sampling…".into());
                     metrics_grid.attach(&label("HEALTH", "card-title"), 0, 0, 1, 1);
-                    metrics_grid.attach(&label("DISK ACTIVITY", "card-title"), 1, 0, 1, 1);
+                    metrics_grid.attach(&label("DISK BUSY TIME", "card-title"), 1, 0, 1, 1);
                     metrics_grid.attach(&label(&health_text, "metric-small"), 0, 1, 1, 1);
-                    metrics_grid.attach(&label(&performance_text, "metric-small"), 1, 1, 1, 1);
+                    metrics_grid.attach(&label(&busy_text, "metric-small"), 1, 1, 1, 1);
                     for (column, value) in [(0, disk.health_percent), (1, disk.performance_percent)] {
                         if let Some(value) = value {
                             let bar = gtk::ProgressBar::new();
@@ -626,14 +713,14 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                         }
                     }
                     card.append(&metrics_grid);
-                    let health_note = if disk.percentage_used.is_some() {
+                    let note = if disk.percentage_used.is_some() {
                         "NVMe health is derived from remaining rated endurance"
                     } else if disk.health_percent.is_some() {
-                        "Health reflects the drive's SMART pass/fail assessment, not remaining lifespan"
+                        "SMART pass/fail assessment, not remaining lifespan"
                     } else {
                         "Drive does not expose a usable SMART health percentage"
                     };
-                    card.append(&label(&format!("{} • Disk activity is busy time, not a speed score • {}", extra, health_note), "muted"));
+                    card.append(&label(&format!("{} • Busy time is not a speed score • {}", extra, note), "muted"));
                     root.append(&card);
                 }
             }
@@ -1040,7 +1127,7 @@ fn main() {
         stack.set_transition_type(gtk::StackTransitionType::Crossfade);
 
         let pages = [
-            "Overview", "CPU", "Performance", "Storage", "Disk Health", "Thermals", "Cameras", "Devices", "Network", "Processes", "Drivers", "Journal",
+            "Overview", "Performance", "Storage", "Thermals", "Cameras", "Devices", "Network", "Processes", "Drivers", "Journal",
         ];
 
         let buttons = gtk::Box::new(Orientation::Vertical, 5);
@@ -1057,10 +1144,8 @@ fn main() {
         for page in pages.iter().skip(1) {
             let button = gtk::ToggleButton::new();
             let symbol = match *page {
-                "CPU" => "◉",
                 "Performance" => "▤",
                 "Storage" => "▣",
-                "Disk Health" => "♥",
                 "Thermals" => "⌁",
                 "Cameras" => "▣",
                 "Devices" => "◇",
