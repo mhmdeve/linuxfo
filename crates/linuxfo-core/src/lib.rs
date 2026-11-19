@@ -379,11 +379,19 @@ pub fn collect_disk_health_helper_json() -> String {
 }
 
 fn collect_disk_health_uncached() -> Vec<DiskHealthInfo> {
+    // Ask the always-on, narrowly scoped root daemon first. The GUI never
+    // elevates itself and never shells out to pkexec during normal refresh.
     if !is_effective_root() {
-        if let Ok(executable) = std::env::current_exe() {
-            if let Ok(output) = std::process::Command::new("pkexec").arg(executable).arg("--smart-scan").output() {
-                if output.status.success() {
-                    if let Ok(disks) = serde_json::from_slice::<Vec<DiskHealthInfo>>(&output.stdout) { return disks; }
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        if let Ok(mut stream) = UnixStream::connect("/run/linuxfo/daemon.sock") {
+            let _ = stream.set_read_timeout(Some(std::time::Duration::from_secs(30)));
+            if stream.write_all(b"{\"action\":\"disk-health\"}\n").is_ok() {
+                let mut response = String::new();
+                if stream.read_to_string(&mut response).is_ok() {
+                    if let Ok(disks) = serde_json::from_str::<Vec<DiskHealthInfo>>(&response) {
+                        return disks;
+                    }
                 }
             }
         }
