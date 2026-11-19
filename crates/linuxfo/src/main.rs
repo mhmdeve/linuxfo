@@ -655,6 +655,7 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
                 "Kernel swap accounting",
             ));
         }
+        "Storage" => {
             root.append(&section_header("Drive Health (SMART / NVMe)", "Drive condition, temperature, endurance and activity"));
             if snapshot.disk_health.is_empty() {
                 root.append(&info_row("No physical drives found", "—", "No supported block devices were discovered under /sys/block."));
@@ -705,7 +706,6 @@ fn content_page(snapshot: &Snapshot, page: &str, monitor: Rc<RefCell<System>>, p
             }
         }
 
-        "Storage" => {
             if snapshot.disks.is_empty() {
                 root.append(&info_row("No mounted filesystems found", "—", "No mounted storage volumes were discovered."));
             }
