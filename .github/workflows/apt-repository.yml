@@ -1,0 +1,107 @@
+name: Publish LinuxFo APT repository
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing GitHub release tag (for example v0.2.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: apt-pages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Set up Pages
+        uses: actions/configure-pages@v5
+
+      - name: Install repository tools
+        run: sudo apt-get update && sudo apt-get install -y apt-utils gnupg
+
+      - name: Download Debian packages from release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.release_tag }}
+          EVENT_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          TAG="${INPUT_TAG:-$EVENT_TAG}"
+          test -n "$TAG"
+          mkdir -p site/pool/main
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'linuxfo_*_amd64.deb' \
+            --pattern 'linuxfo_*_arm64.deb' \
+            --dir site/pool/main
+          test -n "$(find site/pool/main -name '*.deb' -print -quit)"
+
+      - name: Build signed APT repository
+        env:
+          APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+          APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test -n "$APT_GPG_PRIVATE_KEY" || {
+            echo "Missing repository secret APT_GPG_PRIVATE_KEY" >&2
+            exit 1
+          }
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -m 700 "$GNUPGHOME"
+          printf '%s' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          FPR="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1=="fpr"{print $10; exit}')"
+          test -n "$FPR"
+          mkdir -p site/dists/stable/main/binary-amd64 site/dists/stable/main/binary-arm64
+          dpkg-scanpackages --arch amd64 site/pool/main /dev/null > site/dists/stable/main/binary-amd64/Packages
+          dpkg-scanpackages --arch arm64 site/pool/main /dev/null > site/dists/stable/main/binary-arm64/Packages
+          gzip -9fk site/dists/stable/main/binary-amd64/Packages
+          gzip -9fk site/dists/stable/main/binary-arm64/Packages
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin="LinuxFo" \
+            -o APT::FTPArchive::Release::Label="LinuxFo" \
+            -o APT::FTPArchive::Release::Suite="stable" \
+            -o APT::FTPArchive::Release::Codename="stable" \
+            -o APT::FTPArchive::Release::Architectures="amd64 arm64" \
+            -o APT::FTPArchive::Release::Components="main" \
+            release site/dists/stable > site/dists/stable/Release
+          if [ -n "${APT_GPG_PASSPHRASE:-}" ]; then
+            printf '%s' "$APT_GPG_PASSPHRASE" > "$RUNNER_TEMP/gpg-passphrase"
+            chmod 600 "$RUNNER_TEMP/gpg-passphrase"
+            gpg --batch --yes --pinentry-mode loopback --passphrase-file "$RUNNER_TEMP/gpg-passphrase" \
+              --local-user "$FPR" --clearsign --output site/dists/stable/InRelease site/dists/stable/Release
+            gpg --batch --yes --pinentry-mode loopback --passphrase-file "$RUNNER_TEMP/gpg-passphrase" \
+              --local-user "$FPR" --detach-sign --armor --output site/dists/stable/Release.gpg site/dists/stable/Release
+          else
+            gpg --batch --yes --local-user "$FPR" --clearsign --output site/dists/stable/InRelease site/dists/stable/Release
+            gpg --batch --yes --local-user "$FPR" --detach-sign --armor --output site/dists/stable/Release.gpg site/dists/stable/Release
+          fi
+          gpg --batch --armor --export "$FPR" > site/linuxfo-archive-keyring.asc
+          cat > site/index.html <<'EOF'
+          <!doctype html><html><head><meta charset="utf-8"><title>LinuxFo APT</title></head>
+          <body><h1>LinuxFo APT repository</h1>
+          <p>Debian/Ubuntu repository for amd64 and arm64.</p>
+          <p>See the <a href="https://github.com/mhmdeve/linuxfo#install-from-the-linuxfo-apt-repository">installation instructions</a>.</p>
+          </body></html>
+          EOF
+          touch site/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
