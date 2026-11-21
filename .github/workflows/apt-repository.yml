@@ -27,6 +27,9 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
+      - name: Check out website and packaging assets
+        uses: actions/checkout@v4
+
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
 
@@ -34,6 +37,17 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y apt-utils gnupg
+
+      - name: Prepare website
+        run: |
+          set -euo pipefail
+          mkdir -p site/assets site/pool/main
+          cp -a website/. site/
+          cp packaging/io.linuxfo.SystemInfo.svg site/assets/linuxfo.svg
+          cp preview/PREVIEW-1.png site/assets/overview.png
+          cp preview/PREVIEW-2.png site/assets/drive-health.png
+          cp preview/PREVIEW-3.png site/assets/volumes.png
+          touch site/.nojekyll
 
       - name: Download and validate release packages
         env:
@@ -53,7 +67,6 @@ jobs:
             echo "GitHub Release '$TAG' does not exist. Publish that release before building the APT repository." >&2
             exit 1
           }
-          mkdir -p site/pool/main
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern 'linuxfo_*_amd64.deb' \
             --pattern 'linuxfo_*_arm64.deb' \
@@ -117,16 +130,6 @@ jobs:
           gpg "${GPG_ARGS[@]}" --detach-sign --armor \
             --output site/dists/stable/Release.gpg site/dists/stable/Release
           gpg --batch --armor --export "$FPR" > site/linuxfo-archive-keyring.asc
-
-          cat > site/index.html <<'EOF'
-          <!doctype html>
-          <html lang="en"><head><meta charset="utf-8"><title>LinuxFo APT repository</title></head>
-          <body><h1>LinuxFo APT repository</h1>
-          <p>Signed Debian packages for amd64 and arm64.</p>
-          <p><a href="https://github.com/mhmdeve/linuxfo">LinuxFo project on GitHub</a></p>
-          </body></html>
-          EOF
-          touch site/.nojekyll
           gpg --verify site/dists/stable/Release.gpg site/dists/stable/Release
 
       - name: Upload Pages artifact
