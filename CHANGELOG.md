@@ -4,36 +4,30 @@ All notable changes to LinuxFo are documented in this file.
 
 This project follows a simplified version of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and uses the version number defined in the Cargo workspace.
 
-## [0.2.0] - 2026-11-18
+## [0.2.0] - 2026-11-19
 
 ### Added
-- Search processes by process name, PID, or status.
-- Kill selected processes with a confirmation prompt.
-- Restart eligible processes by relaunching their executable with the captured arguments and working directory.
-- Display matching-process count and keep process actions available directly in the Processes page.
+- Searchable process management with process-name, PID, and status filters.
+- Confirmed process termination and restart actions.
+- Dedicated Drivers and Journal pages for hardware-driver information and system logs.
+- Live journal streaming with pause/resume and severity and text filters.
+- Live Performance dashboard with per-core CPU graphs and network traffic rates.
+- Persistent, restricted root daemon for SMART/NVMe disk diagnostics.
+- systemd service integration and daemon packaging for Debian, RPM, and Arch builds.
+
+### Fixed
+- Device detection no longer incorrectly identifies fingerprint readers as generic devices.
+- Fixed page scrolling, excess blank space, and scroll-position resets during refresh.
+- Moved CPU monitoring into Performance and integrated Drive Health at the top of Storage.
+- Improved SMART diagnostics to use the persistent daemon rather than repeatedly requesting authentication.
+- Fixed process-action callback handling and restart confirmation behavior.
+- Fixed package metadata and version consistency across workspace crates and distribution packages.
+- Fixed manual release version selection and release reruns.
 
 ### Notes
 - Process actions run with the current user's permissions and do not automatically elevate privileges.
 - Restarting systemd-managed services or processes requiring special launch environments may not work reliably.
-
-## [0.2.0] - 2026-11-19
-
-### Added
-- Added searchable process management with process-name, PID, and status filters.
-- Added confirmed process termination and restart actions.
-- Added dedicated Drivers and Journal pages for hardware-driver information and system logs.
-- Added live journal streaming with pause/resume and severity and text filters.
-- Added a live Performance dashboard with per-core CPU graphs and network traffic rates.
-- Added a persistent, restricted root daemon for SMART/NVMe disk diagnostics, replacing the GUI-launched privileged helper.
-- Added systemd service integration and daemon packaging for Debian, RPM, and Arch builds.
-
-### Fixed
-- Fixed device detection to avoid incorrectly identifying fingerprint readers as generic devices.
-- Fixed page scrolling, excess blank space, and scroll-position resets during refresh.
-- Moved CPU monitoring into Performance and integrated Drive Health at the top of Storage.
-- Improved SMART diagnostics to use the persistent daemon instead of repeatedly requesting authentication.
-- Fixed process-action callback handling and restart confirmation behavior.
-- Fixed package metadata and version consistency across workspace crates and distribution packages.
+- The hardware diagnostics daemon exposes only its fixed, read-only disk-health operation.
 
 ## [0.1.0] - 2026-11-17
 
@@ -62,8 +56,6 @@ This project follows a simplified version of [Keep a Changelog](https://keepacha
 - Corrected SMART helper JSON deserialization and effective-UID detection.
 - Fixed disk-activity percentage calculation and connected sampled activity data to the system snapshot.
 - Fixed Clippy and Rust compilation issues in the disk-activity sampler.
-- Fixed manual release workflow version detection so branch-triggered runs use the Cargo package version instead of the branch name.
-- Fixed the release publishing job by checking out the repository before invoking GitHub CLI.
 
 ### Notes
 - Disk activity is a busy-time utilisation indicator, not a disk-speed benchmark.
