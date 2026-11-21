@@ -1,8 +1,15 @@
 name: Publish LinuxFo APT repository
 
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
+    paths:
+      - "website/**"
+      - "preview/**"
+      - "packaging/io.linuxfo.SystemInfo.svg"
+  workflow_run:
+    workflows: ["LinuxFo Release"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       release_tag:
@@ -21,6 +28,7 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages
@@ -53,7 +61,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_TAG: ${{ inputs.release_tag }}
-          EVENT_TAG: ${{ github.event.release.tag_name }}
+          EVENT_TAG: ${{ github.event.release.tag_name || github.event.workflow_run.head_branch }}
         shell: bash
         run: |
           set -euo pipefail
