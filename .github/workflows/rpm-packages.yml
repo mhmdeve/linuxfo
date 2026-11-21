@@ -44,9 +44,7 @@ jobs:
           docker run --rm --platform linux/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }} \
             -e VERSION="$VERSION" -v "$PWD:/src" -w /src fedora:42 bash -lc '
               set -euo pipefail
-              dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel rpm-build
-              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-              source /root/.cargo/env
+              dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel rpm-build rust cargo
               cargo build --locked --release -p linuxfo --bins
               mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
               cat > /root/rpmbuild/SPECS/linuxfo.spec <<EOF
