@@ -32,7 +32,22 @@ LinuxFo is written in Rust with GTK4/libadwaita. Linux hardware data is collecte
 
 GitHub Actions validates native GTK builds on x86_64 and AArch64. Version tags publish compressed binaries and SHA-256 checksums. Debian package builds target amd64/arm64; Fedora RPM and Arch PKGBUILD packaging have dedicated workflows. All native desktop packages require compatible GTK4/libadwaita runtime libraries. See [packaging/README.md](packaging/README.md) for the packaging matrix and limitations.
 
-## Install on Debian / Ubuntu
+## Install from the LinuxFo APT repository (Debian / Ubuntu)
+
+After the repository has been published and its signing key is available:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://mhmdeve.github.io/linuxfo/linuxfo-archive-keyring.asc | sudo gpg --dearmor --yes -o /etc/apt/keyrings/linuxfo.gpg
+sudo chmod 0644 /etc/apt/keyrings/linuxfo.gpg
+echo "deb [arch=amd64,arm64 signed-by=/etc/apt/keyrings/linuxfo.gpg] https://mhmdeve.github.io/linuxfo stable main" | sudo tee /etc/apt/sources.list.d/linuxfo.list
+sudo apt update
+sudo apt install linuxfo
+```
+
+See [APT repository setup](docs/apt-repository.md) for the maintainer's one-time signing-key and GitHub Pages configuration. Direct `.deb` installation remains available below.
+
+## Install on Debian / Ubuntu (direct .deb download)
 
 Download the matching package from the GitHub Releases page:
 
