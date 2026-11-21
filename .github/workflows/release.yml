@@ -8,9 +8,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: linuxfo-release-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build:
-    name: Release (${{ matrix.arch }})
+    name: Build release (${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -24,50 +28,90 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - name: Install GTK build dependencies
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libgtk-4-dev libadwaita-1-dev librsvg2-bin
+        with:
+          fetch-depth: 0
+
+      - name: Install native dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libgtk-4-dev libadwaita-1-dev librsvg2-bin dpkg-dev
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - name: Build release binaries
-        run: cargo build --release -p linuxfo --bins
-      - name: Build Debian package
+
+      - name: Resolve and validate release version
+        id: version
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+          set -euo pipefail
+          CARGO_VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
+            if [[ "$GITHUB_REF_NAME" != v* ]]; then
+              echo "Release tags must use the vX.Y.Z format." >&2
+              exit 1
+            fi
+            if [[ "$VERSION" != "$CARGO_VERSION" ]]; then
+              echo "Tag version ($VERSION) does not match Cargo version ($CARGO_VERSION)." >&2
+              exit 1
+            fi
           else
-            VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
+            VERSION="$CARGO_VERSION"
           fi
           if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-            echo "Invalid release version: $VERSION" >&2
+            echo "Invalid version: $VERSION" >&2
             exit 1
           fi
-          PKG="linuxfo_${VERSION}_${{ matrix.deb_arch }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build application and privileged daemon
+        run: cargo build --locked --release -p linuxfo --bins
+
+      - name: Verify release binaries
+        run: |
+          test -x target/release/linuxfo
+          test -x target/release/linuxfo-daemon
+
+      - name: Assemble Debian package
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          DEB_ARCH: ${{ matrix.deb_arch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKG="linuxfo_${VERSION}_${DEB_ARCH}"
           ROOT="pkg/$PKG"
-          mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/lib/systemd/system" "$ROOT/usr/share/applications" "$ROOT/usr/share/doc/linuxfo" "$ROOT/usr/share/icons/hicolor/scalable/apps"
+          mkdir -p "$ROOT/DEBIAN" "$ROOT/usr/bin" "$ROOT/usr/lib/systemd/system" \
+            "$ROOT/usr/share/applications" "$ROOT/usr/share/doc/linuxfo" \
+            "$ROOT/usr/share/icons/hicolor/scalable/apps"
+
           for size in 48 64 128 256 512; do
             mkdir -p "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps"
-            rsvg-convert -w "$size" -h "$size" packaging/io.linuxfo.SystemInfo.svg > "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps/io.linuxfo.SystemInfo.png"
+            rsvg-convert -w "$size" -h "$size" packaging/io.linuxfo.SystemInfo.svg \
+              > "$ROOT/usr/share/icons/hicolor/${size}x${size}/apps/io.linuxfo.SystemInfo.png"
           done
-          test -x target/release/linuxfo-daemon
+
           install -m 0755 target/release/linuxfo "$ROOT/usr/bin/linuxfo"
           install -m 0755 target/release/linuxfo-daemon "$ROOT/usr/bin/linuxfo-daemon"
           install -m 0644 packaging/linuxfo-daemon.service "$ROOT/usr/lib/systemd/system/linuxfo-daemon.service"
           install -m 0644 packaging/io.linuxfo.SystemInfo.desktop "$ROOT/usr/share/applications/io.linuxfo.SystemInfo.desktop"
           install -m 0644 packaging/io.linuxfo.SystemInfo.svg "$ROOT/usr/share/icons/hicolor/scalable/apps/io.linuxfo.SystemInfo.svg"
           install -m 0644 README.md LICENSE "$ROOT/usr/share/doc/linuxfo/"
+
           cat > "$ROOT/DEBIAN/control" <<EOF
           Package: linuxfo
           Version: $VERSION
           Section: utils
           Priority: optional
-          Architecture: ${{ matrix.deb_arch }}
+          Architecture: $DEB_ARCH
           Depends: libgtk-4-1, libadwaita-1-0, smartmontools
           Maintainer: Muhammad Hamza Mushtaq <mhmdeveloperofficial@gmail.com>
           Homepage: https://github.com/mhmdeve/linuxfo
           Description: Linux system information and hardware monitor
            GTK4 desktop application for Linux hardware and sensor information.
           EOF
+
           cat > "$ROOT/DEBIAN/postinst" <<'EOF'
           #!/bin/sh
           set -e
@@ -95,36 +139,38 @@ jobs:
           EOF
           chmod 0755 "$ROOT/DEBIAN/postinst" "$ROOT/DEBIAN/prerm" "$ROOT/DEBIAN/postrm"
           dpkg-deb --root-owner-group --build "$ROOT"
-          dpkg-deb --contents "$ROOT.deb" | grep -E 'usr/bin/linuxfo-daemon|linuxfo-daemon.service'
-          mv "$ROOT.deb" "linuxfo_${VERSION}_${{ matrix.deb_arch }}.deb"
-      - name: Bundle release archive
-        shell: bash
+          PACKAGE="linuxfo_${VERSION}_${DEB_ARCH}.deb"
+          mv "$ROOT.deb" "$PACKAGE"
+          dpkg-deb --info "$PACKAGE"
+          dpkg-deb --contents "$PACKAGE" | grep -q 'usr/bin/linuxfo-daemon'
+          dpkg-deb --contents "$PACKAGE" | grep -q 'linuxfo-daemon.service'
+
+      - name: Bundle portable archive
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          ARCH: ${{ matrix.arch }}
         run: |
-          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
-          fi
-          ARCHIVE="linuxfo-v${VERSION}-${{ matrix.arch }}"
-          mkdir -p "bundle/$ARCHIVE"
-          install -m 0755 target/release/linuxfo "bundle/$ARCHIVE/linuxfo"
-          install -m 0644 README.md LICENSE "bundle/$ARCHIVE/"
-          install -m 0644 packaging/io.linuxfo.SystemInfo.desktop "bundle/$ARCHIVE/"
-          tar -C bundle -czf "$ARCHIVE.tar.gz" "$ARCHIVE"
-          sha256sum "$ARCHIVE.tar.gz" > "$ARCHIVE.tar.gz.sha256"
+          set -euo pipefail
+          NAME="linuxfo-v${VERSION}-${ARCH}"
+          mkdir -p "bundle/$NAME"
+          install -m 0755 target/release/linuxfo "bundle/$NAME/linuxfo"
+          install -m 0644 README.md LICENSE packaging/io.linuxfo.SystemInfo.desktop "bundle/$NAME/"
+          tar -C bundle -czf "$NAME.tar.gz" "$NAME"
+          sha256sum "$NAME.tar.gz" > "$NAME.tar.gz.sha256"
+
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.arch }}
+          if-no-files-found: error
           path: |
             linuxfo-*.tar.gz
             linuxfo-*.sha256
             linuxfo_*.deb
+
   publish:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-      # gh release create needs a checked-out Git repository to resolve the
-      # repository and tag context in the publish job.
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -133,20 +179,41 @@ jobs:
           pattern: release-*
           merge-multiple: true
           path: release-assets
+
+      - name: Verify complete release asset set
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
+            TAG="v$VERSION"
+          fi
+          VERSION="${TAG#v}"
+          for file in \
+            "linuxfo_${VERSION}_amd64.deb" \
+            "linuxfo_${VERSION}_arm64.deb" \
+            "linuxfo-v${VERSION}-x86_64.tar.gz" \
+            "linuxfo-v${VERSION}-aarch64.tar.gz"; do
+            test -s "release-assets/$file" || { echo "Missing release asset: $file" >&2; exit 1; }
+          done
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         shell: bash
         run: |
-          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
-            RELEASE_TAG="${GITHUB_REF_NAME}"
-          else
-            RELEASE_TAG="v$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
-          fi
-          RELEASE_VERSION="${RELEASE_TAG#v}"
+          set -euo pipefail
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" release-assets/* --clobber
-            gh release edit "$RELEASE_TAG" --title "LinuxFo v${RELEASE_VERSION}"
+            gh release edit "$RELEASE_TAG" --title "LinuxFo v$RELEASE_VERSION"
           else
-            gh release create "$RELEASE_TAG" release-assets/* --title "LinuxFo v${RELEASE_VERSION}" --generate-notes
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --title "LinuxFo v$RELEASE_VERSION" --generate-notes
           fi
