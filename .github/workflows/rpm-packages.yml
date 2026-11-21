@@ -2,8 +2,6 @@ name: LinuxFo RPM packages
 
 on:
   workflow_dispatch:
-  push:
-    tags: ['v*']
 
 permissions:
   contents: read
@@ -22,21 +20,16 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+
       - name: Resolve release version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          CARGO_VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)"
-          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            test "$VERSION" = "$CARGO_VERSION" || { echo "Tag and Cargo versions differ." >&2; exit 1; }
-          else
-            VERSION="$CARGO_VERSION"
-          fi
+          VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Build RPM in Fedora container
+      - name: Build and package RPM in Fedora container
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
@@ -46,6 +39,7 @@ jobs:
               set -euo pipefail
               dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel rpm-build rust cargo
               cargo build --locked --release -p linuxfo --bins
+
               mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
               cat > /root/rpmbuild/SPECS/linuxfo.spec <<EOF
 Name: linuxfo
