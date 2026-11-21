@@ -22,13 +22,12 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
       - name: Resolve release version
         id: version
         shell: bash
         run: |
           set -euo pipefail
-          CARGO_VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
+          CARGO_VERSION="$(grep -m1 '^version = ' Cargo.toml | cut -d '"' -f2)"
           if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
             test "$VERSION" = "$CARGO_VERSION" || { echo "Tag and Cargo versions differ." >&2; exit 1; }
@@ -46,6 +45,7 @@ jobs:
             -e VERSION="$VERSION" -v "$PWD:/src" -w /src fedora:42 bash -lc '
               set -euo pipefail
               dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel rpm-build
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
               source /root/.cargo/env
               cargo build --locked --release -p linuxfo --bins
               mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
