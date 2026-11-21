@@ -22,6 +22,7 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
       - name: Resolve release version
         id: version
         shell: bash
@@ -44,8 +45,7 @@ jobs:
           docker run --rm --platform linux/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }} \
             -e VERSION="$VERSION" -v "$PWD:/src" -w /src fedora:42 bash -lc '
               set -euo pipefail
-              dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel curl rpm-build
-              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+              dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel rpm-build
               source /root/.cargo/env
               cargo build --locked --release -p linuxfo --bins
               mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
