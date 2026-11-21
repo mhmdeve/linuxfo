@@ -49,6 +49,10 @@ jobs:
             exit 1
           fi
 
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null || {
+            echo "GitHub Release '$TAG' does not exist. Publish that release before building the APT repository." >&2
+            exit 1
+          }
           mkdir -p site/pool/main
           gh release download "$TAG" --repo "$GITHUB_REPOSITORY" \
             --pattern 'linuxfo_*_amd64.deb' \
