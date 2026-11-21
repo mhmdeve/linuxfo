@@ -2,6 +2,8 @@ name: LinuxFo RPM packages
 
 on:
   workflow_dispatch:
+  push:
+    tags: ['v*']
 
 permissions:
   contents: read
@@ -20,17 +22,36 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
-      - name: Build RPM in Fedora container
+      - name: Resolve release version
+        id: version
+        shell: bash
         run: |
-          docker run --rm --platform linux/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }} -v "$PWD:/src" -w /src fedora:42 bash -lc '
-            dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel curl rpm-build
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
-            source /root/.cargo/env
-            cargo build --release -p linuxfo
-            mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
-            cat > /root/rpmbuild/SPECS/linuxfo.spec <<EOF
+          set -euo pipefail
+          CARGO_VERSION="$(cargo metadata --no-deps --format-version 1 | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == "linuxfo"))')"
+          if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+            test "$VERSION" = "$CARGO_VERSION" || { echo "Tag and Cargo versions differ." >&2; exit 1; }
+          else
+            VERSION="$CARGO_VERSION"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build RPM in Fedora container
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker run --rm --platform linux/${{ matrix.arch == 'x86_64' && 'amd64' || 'arm64' }} \
+            -e VERSION="$VERSION" -v "$PWD:/src" -w /src fedora:42 bash -lc '
+              set -euo pipefail
+              dnf install -y gcc gcc-c++ make pkgconf-pkg-config gtk4-devel libadwaita-devel curl rpm-build
+              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal
+              source /root/.cargo/env
+              cargo build --locked --release -p linuxfo --bins
+              mkdir -p /root/rpmbuild/{BUILD,RPMS,SOURCES,SPECS,SRPMS}
+              cat > /root/rpmbuild/SPECS/linuxfo.spec <<EOF
 Name: linuxfo
-Version: 0.2.0
+Version: $VERSION
 Release: 1%{?dist}
 Summary: Linux system information and hardware monitor
 License: MIT
@@ -54,11 +75,13 @@ if command -v systemctl >/dev/null 2>&1; then systemctl daemon-reload || :; fi
 /usr/bin/linuxfo-daemon
 /usr/lib/systemd/system/linuxfo-daemon.service
 EOF
-            rpmbuild -bb /root/rpmbuild/SPECS/linuxfo.spec
-            mkdir -p /src/rpm-out
-            cp /root/rpmbuild/RPMS/*/*.rpm /src/rpm-out/
-          '
+              rpmbuild -bb /root/rpmbuild/SPECS/linuxfo.spec
+              mkdir -p /src/rpm-out
+              cp /root/rpmbuild/RPMS/*/*.rpm /src/rpm-out/
+            '
+
       - uses: actions/upload-artifact@v4
         with:
           name: rpm-${{ matrix.arch }}
           path: rpm-out/*.rpm
+          if-no-files-found: error
